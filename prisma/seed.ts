@@ -10,6 +10,7 @@ async function main() {
       id: 'default-user',
       name: 'Hammad Ismail',
       email: 'hammadismail2005@gmail.com',
+      password: 'Welcome123',
       level: 5,
       xp: 750,
       longestStreak: 12,
