@@ -3,7 +3,6 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiOperation,
-  ApiParam,
   ApiResponse,
 } from '@nestjs/swagger';
 import { SignUpDto } from './dto/signup.dto';
