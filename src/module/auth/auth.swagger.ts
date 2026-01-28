@@ -7,6 +7,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { SignUpDto } from './dto/signup.dto';
+import { LoginDto } from './dto/login.dto';
 
 export function ApiProfileDocs() {
   return applyDecorators(
@@ -49,42 +50,35 @@ Authorization: Bearer <your-access-token>
 
 export function ApiLoginDocs() {
   return applyDecorators(
-    ApiBearerAuth(),
     ApiOperation({
       summary: 'Login to get access and refresh tokens',
-      description: ``,
     }),
-    ApiParam({
-      name: 'email',
-      description: 'Email of the user',
+
+    ApiBody({
+      type: LoginDto,
       required: true,
-      type: 'string',
     }),
-    ApiParam({
-      name: 'password',
-      description: 'Password of the user',
-      required: true,
-      type: 'string',
-    }),
+
     ApiResponse({
       status: 200,
-      description: '.',
+      description: 'User successfully Login',
       schema: {
         example: {
           id: 1,
           email: 'john.doe@example.com',
-          role: 'USER',
-          createdAt: '2025-09-14T03:30:00.000Z',
+          accessToken: 'your-access-token',
+          refreshToken: 'your-refresh-token',
         },
       },
     }),
+
     ApiResponse({
       status: 401,
-      description: 'Unauthorized. Missing or invalid token.',
+      description: 'Failed to login',
       schema: {
         example: {
           statusCode: 401,
-          message: 'Unauthorized',
+          message: 'Failed to login',
         },
       },
     }),
