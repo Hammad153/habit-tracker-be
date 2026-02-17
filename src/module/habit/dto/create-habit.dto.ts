@@ -39,4 +39,16 @@ export class CreateHabitDto {
     description: 'The ID of the user owning the habit',
   })
   userId?: string;
+
+  @ApiProperty({
+    example: '#3B82F6',
+    description: 'The color of the icon',
+  })
+  iconColor: string;
+
+  @ApiProperty({
+    example: 'rgba(255,255,255,0.1)',
+    description: 'The background color of the icon',
+  })
+  iconBg: string;
 }
