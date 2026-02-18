@@ -1,3 +1,6 @@
+import { AuthService } from './auth.service';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { AuthGuard } from './auth.guard';
 import {
   Body,
   Get,
@@ -9,9 +12,6 @@ import {
   Request,
   Req,
 } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { AuthGuard } from './auth.guard';
 import { ApiProfileDocs, ApiLoginDocs, ApiSignUpDocs } from './auth.swagger';
 import { Public } from 'src/core/decorators/public.decorator';
 

@@ -24,7 +24,7 @@ export class AuthService {
     const user = await this.userSvc.findByEmail(email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const isMatch = await bcrypt.compare(pass, user.password as string);
+    const isMatch = await bcrypt.compare(pass, user.password);
     if (!isMatch) throw new UnauthorizedException('Invalid credentials');
 
     const tokens = await this.generateTokens(user);
@@ -57,8 +57,8 @@ export class AuthService {
       );
 
       return { access_token: newAccessToken };
-    } catch (err) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+    } catch (err: any) {
+      throw new UnauthorizedException('Invalid or expired refresh token', err);
     }
   }
 
