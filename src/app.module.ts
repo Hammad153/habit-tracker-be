@@ -7,8 +7,6 @@ import { UsersService } from './module/users/users.service';
 import { DatabaseModule } from './core/database/database.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
-import { RolesGuard } from './guard/roles.guard';
-import { AuthGuard } from './module/auth/auth.guard';
 import { MyLoggerModule } from '../log/my-logger/my-logger.module';
 import { MyLoggerService } from '../log/my-logger/my-logger.service';
 import { AuthModule } from './module/auth/auth.module';
@@ -58,9 +56,6 @@ import { JwtModule } from '@nestjs/jwt';
     UsersService,
     MyLoggerService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
-    // AuthGuard must come before RolesGuard - it populates request.user
-    //{ provide: APP_GUARD, useClass: AuthGuard },
-    //{ provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

@@ -1,16 +1,12 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { DatabaseService } from 'src/core/database/database.service';
-import { ConfigService } from '@nestjs/config';
 import { Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { SALT_ROUND } from 'src/constants';
 
 @Injectable()
 export class UsersService {
-  constructor(
-    private readonly databaseSvc: DatabaseService,
-    private readonly configSvc: ConfigService,
-  ) {}
+  constructor(private readonly databaseSvc: DatabaseService) {}
 
   public async create(createUserDto: Prisma.UserCreateInput): Promise<User> {
     const passwordHashed = await bcrypt.hash(

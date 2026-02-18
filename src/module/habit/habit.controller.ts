@@ -1,3 +1,5 @@
+import { HabitService } from './habit.service';
+import { ApiTags } from '@nestjs/swagger';
 import {
   Controller,
   Delete,
@@ -8,8 +10,8 @@ import {
   Param,
   Query,
 } from '@nestjs/common';
-import { HabitService } from './habit.service';
-import { ApiTags } from '@nestjs/swagger';
+import { CreateHabitDto } from './dto/create-habit.dto';
+import { UpdateHabitDto } from './dto/update-habit.dto';
 import {
   CreateHabitDocs,
   DeleteHabitDocs,
@@ -18,8 +20,6 @@ import {
   ToggleCompletionDocs,
   UpdateHabitDocs,
 } from './habit.swagger';
-import { CreateHabitDto } from './dto/create-habit.dto';
-import { UpdateHabitDto } from './dto/update-habit.dto';
 import { ToggleCompletionDto } from './dto/toggle-completion.dto';
 
 @ApiTags('Habits')

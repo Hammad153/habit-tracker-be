@@ -1,11 +1,11 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { AwardsService } from './awards.service';
-import { ApiTags } from '@nestjs/swagger';
 import {
   FindAllAwardsDocs,
   FindOneAwardDocs,
   FindUserBadgesDocs,
 } from './award.swagger';
+import { ApiTags } from '@nestjs/swagger';
 
 @ApiTags('Awards')
 @Controller('awards')
