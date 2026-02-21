@@ -60,12 +60,23 @@ export class HabitService {
       });
     }
 
-    return this.databaseSvc.completion.create({
-      data: {
-        habitId,
-        date,
-        status: true,
-      },
-    });
+    try {
+      return await this.databaseSvc.completion.create({
+        data: {
+          habitId,
+          date,
+          status: true,
+        },
+      });
+    } catch (error) {
+      if (error.code === 'P2002') {
+        return this.databaseSvc.completion.findUniqueOrThrow({
+          where: {
+            habitId_date: { habitId, date },
+          },
+        });
+      }
+      throw error;
+    }
   }
 }
