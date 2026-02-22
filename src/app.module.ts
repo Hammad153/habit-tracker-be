@@ -5,7 +5,7 @@ import { UsersController } from './module/users/users.controller';
 import { UsersModule } from './module/users/users.module';
 import { UsersService } from './module/users/users.service';
 import { DatabaseModule } from './core/database/database.module';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+// import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { MyLoggerModule } from '../log/my-logger/my-logger.module';
 import { MyLoggerService } from '../log/my-logger/my-logger.service';
@@ -26,6 +26,7 @@ import { JwtModule } from '@nestjs/jwt';
     DatabaseModule,
     MyLoggerModule,
     AuthModule,
+    /*
     ThrottlerModule.forRoot({
       throttlers: [
         {
@@ -40,6 +41,7 @@ import { JwtModule } from '@nestjs/jwt';
         },
       ],
     }),
+    */
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: configValidationSchema,
@@ -57,7 +59,7 @@ import { JwtModule } from '@nestjs/jwt';
     AppService,
     UsersService,
     MyLoggerService,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}
