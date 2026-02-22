@@ -14,15 +14,13 @@ async function bootstrap() {
   //app.useGlobalGuards(
   //  new AuthGuard(app.get(JwtService), app.get(AuthService), reflector),
   //);
-  app.use(express.json());
-  app.use('/uploads', express.static('uploads'));
-
   const { httpAdapter } = app.get(HttpAdapterHost);
 
+  app.use(express.json());
+  app.use('/uploads', express.static('uploads'));
   app.useGlobalFilters(new AllExcenptionFilter(httpAdapter));
-
   app.enableCors();
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api/v1');
 
   const config = new DocumentBuilder()
     .setTitle('Habit Tracker')
