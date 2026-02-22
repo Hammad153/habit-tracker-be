@@ -77,6 +77,9 @@ importers:
       ejs:
         specifier: ^3.1.10
         version: 3.1.10
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1
       g:
         specifier: ^2.0.1
         version: 2.0.1
