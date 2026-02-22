@@ -48,6 +48,8 @@ model Habit {
   category    String?
   frequency   String?      // e.g., "Daily", "Weekdays"
   priority    String?      // e.g., "High", "Medium", "Low"
+  goal        Float        @default(1) // Target value (e.g., 30 pushups)
+  unit        String?      @default("times") // Unit (e.g., reps, pages)
   isArchived  Boolean      @default(false)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -59,6 +61,7 @@ model Completion {
   habitId String
   date    String   // Format: YYYY-MM-DD
   status  Boolean  @default(true)
+  value   Float    @default(1) // Actual progress value
   habit   Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
 
   @@unique([habitId, date])

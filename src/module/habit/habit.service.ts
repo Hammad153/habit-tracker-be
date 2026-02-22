@@ -47,16 +47,32 @@ export class HabitService {
   public async toggleCompletion(
     habitId: string,
     date: string,
+    value?: number,
   ): Promise<Completion> {
+    const habit = await this.findOne(habitId);
     const existing = await this.databaseSvc.completion.findUnique({
       where: {
         habitId_date: { habitId, date },
       },
     });
 
+    const completionValue = value ?? habit.goal;
+    const isCompleted = completionValue >= habit.goal;
+
     if (existing) {
-      return this.databaseSvc.completion.delete({
+      if (value === undefined) {
+        // Simple toggle off if no value provided (traditional behavior)
+        return this.databaseSvc.completion.delete({
+          where: { id: existing.id },
+        });
+      }
+      // Update existing completion with new value
+      return this.databaseSvc.completion.update({
         where: { id: existing.id },
+        data: {
+          value: completionValue,
+          status: isCompleted,
+        },
       });
     }
 
@@ -65,14 +81,19 @@ export class HabitService {
         data: {
           habitId,
           date,
-          status: true,
+          status: isCompleted,
+          value: completionValue,
         },
       });
     } catch (error) {
       if (error.code === 'P2002') {
-        return this.databaseSvc.completion.findUniqueOrThrow({
+        return this.databaseSvc.completion.update({
           where: {
             habitId_date: { habitId, date },
+          },
+          data: {
+            value: completionValue,
+            status: isCompleted,
           },
         });
       }

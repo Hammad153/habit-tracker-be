@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "Completion" ADD COLUMN     "value" DOUBLE PRECISION NOT NULL DEFAULT 1;
+
+-- AlterTable
+ALTER TABLE "Habit" ADD COLUMN     "goal" DOUBLE PRECISION NOT NULL DEFAULT 1,
+ADD COLUMN     "unit" TEXT DEFAULT 'times';

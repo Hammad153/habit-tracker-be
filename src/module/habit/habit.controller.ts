@@ -61,8 +61,8 @@ export class HabitController {
   @ToggleCompletionDocs()
   toggleCompletion(
     @Param('id') id: string,
-    @Body() { date }: ToggleCompletionDto,
+    @Body() { date, value }: ToggleCompletionDto,
   ) {
-    return this.habitSvc.toggleCompletion(id, date);
+    return this.habitSvc.toggleCompletion(id, date, value);
   }
 }

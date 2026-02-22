@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from 'src/core/database/database.service';
+import {
+  calculateStreaks,
+  calculatePerfectDays,
+} from 'src/core/utils/streak.utils';
 
 @Injectable()
 export class ProfileService {
@@ -31,36 +35,20 @@ export class ProfileService {
         totalHabits: 0,
         longestStreak: 0,
         completionRate: 0,
+        perfectDays: 0,
       };
     }
 
     const totalHabits = user.habits.length;
 
-    // Calculate Longest Streak (User-wide)
+    // Calculate Streaks (User-wide)
     const allCompletions = user.habits.flatMap((h) => h.completions);
-    const uniqueDates = [...new Set(allCompletions.map((c) => c.date))].sort();
+    const completionDates = allCompletions.map((c) => c.date);
+    const { currentStreak, longestStreak } = calculateStreaks(completionDates);
 
-    let longestStreak = 0;
-    let currentStreak = 0;
-    let prevDate: Date | null = null;
-
-    for (const dateStr of uniqueDates) {
-      const currentDate = new Date(dateStr);
-      if (prevDate) {
-        const diffDays = Math.floor(
-          (currentDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24),
-        );
-        if (diffDays === 1) {
-          currentStreak++;
-        } else {
-          currentStreak = 1;
-        }
-      } else {
-        currentStreak = 1;
-      }
-      longestStreak = Math.max(longestStreak, currentStreak);
-      prevDate = currentDate;
-    }
+    // Calculate Perfect Days
+    const habitCompletionsList = user.habits.map((h) => h.completions);
+    const perfectDays = calculatePerfectDays(habitCompletionsList);
 
     // Calculate Completion Rate
     let completionRate = 0;
@@ -70,13 +58,17 @@ export class ProfileService {
       const diffTime = Math.abs(today.getTime() - startDate.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
-      completionRate = allCompletions.length / (totalHabits * diffDays);
+      completionRate =
+        allCompletions.filter((c) => c.status).length /
+        (totalHabits * diffDays);
     }
 
     return {
       ...user,
       totalHabits,
+      currentStreak,
       longestStreak,
+      perfectDays,
       completionRate: Math.min(completionRate, 1),
     };
   }

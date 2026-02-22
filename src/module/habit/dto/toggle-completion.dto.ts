@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ToggleCompletionDto {
   @ApiProperty({
@@ -6,4 +6,10 @@ export class ToggleCompletionDto {
     description: 'The date for the completion',
   })
   date: string;
+
+  @ApiPropertyOptional({
+    example: 15,
+    description: 'The value logged for this completion',
+  })
+  value?: number;
 }

@@ -51,4 +51,16 @@ export class CreateHabitDto {
     description: 'The background color of the icon',
   })
   iconBg: string;
+
+  @ApiPropertyOptional({
+    example: 30,
+    description: 'The daily goal value',
+  })
+  goal?: number;
+
+  @ApiPropertyOptional({
+    example: 'pushups',
+    description: 'The unit for the goal',
+  })
+  unit?: string;
 }
