@@ -22,10 +22,10 @@ const bootstrap = async () => {
   app.setGlobalPrefix('api/v1');
 
   const config = new DocumentBuilder()
-    .setTitle('SME GLOBAL')
-    .setDescription('Manage invoices, payroll, and products')
+    .setTitle('Habit Tracker')
+    .setDescription('Manage habit, timeline, and awards')
     .setVersion('1.0')
-    .addTag('sme')
+    .addTag('habit-tracker')
     .addBearerAuth()
     .build();
 
