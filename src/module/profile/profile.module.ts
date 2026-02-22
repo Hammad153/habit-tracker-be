@@ -6,5 +6,6 @@ import { DatabaseService } from 'src/core/database/database.service';
 @Module({
   controllers: [ProfileController],
   providers: [ProfileService, DatabaseService],
+  exports: [ProfileService],
 })
 export class ProfileModule {}

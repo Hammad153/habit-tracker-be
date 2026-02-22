@@ -6,5 +6,6 @@ import { DatabaseService } from 'src/core/database/database.service';
 @Module({
   controllers: [AwardsController],
   providers: [AwardsService, DatabaseService],
+  exports: [AwardsService],
 })
 export class AwardsModule {}

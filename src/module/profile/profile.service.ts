@@ -4,6 +4,7 @@ import {
   calculateStreaks,
   calculatePerfectDays,
 } from 'src/core/utils/streak.utils';
+import { calculateNeededXp } from 'src/core/utils/progression.utils';
 
 @Injectable()
 export class ProfileService {
@@ -70,6 +71,7 @@ export class ProfileService {
       longestStreak,
       perfectDays,
       completionRate: Math.min(completionRate, 1),
+      neededXp: calculateNeededXp(user.level),
     };
   }
 
@@ -77,6 +79,34 @@ export class ProfileService {
     return this.databaseSvc.user.update({
       where: { id: userId },
       data,
+    });
+  }
+
+  public async addExperience(userId: string, amount: number) {
+    const user = await this.databaseSvc.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) return;
+
+    let newXp = user.xp + amount;
+    if (newXp < 0) newXp = 0;
+
+    let newLevel = user.level;
+    let neededXp = calculateNeededXp(newLevel);
+
+    while (newXp >= neededXp) {
+      newXp -= neededXp;
+      newLevel++;
+      neededXp = calculateNeededXp(newLevel);
+    }
+
+    return this.databaseSvc.user.update({
+      where: { id: userId },
+      data: {
+        xp: newXp,
+        level: newLevel,
+      },
     });
   }
 }
