@@ -35,7 +35,7 @@ const bootstrap = async () => {
         methodKey,
     });
 
-  SwaggerModule.setup('docs', app, documentFactory, {
+  SwaggerModule.setup('api/v1/docs', app, documentFactory, {
     jsonDocumentUrl: 'docs/json',
     customCssUrl:
       'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css',
