@@ -26,18 +26,20 @@ import { JwtModule } from '@nestjs/jwt';
     DatabaseModule,
     MyLoggerModule,
     AuthModule,
-    ThrottlerModule.forRoot([
-      {
-        name: 'short',
-        ttl: 1000,
-        limit: 10,
-      },
-      {
-        name: 'long',
-        ttl: 60000,
-        limit: 100,
-      },
-    ]),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          name: 'short',
+          ttl: 1000,
+          limit: 10,
+        },
+        {
+          name: 'long',
+          ttl: 60000,
+          limit: 100,
+        },
+      ],
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: configValidationSchema,
