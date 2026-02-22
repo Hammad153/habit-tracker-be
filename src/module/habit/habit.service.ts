@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Habit, Completion } from '@prisma/client';
-import { DatabaseService } from 'src/core/database/database.service';
+import { DatabaseService } from '../../core/database/database.service';
 import { ProfileService } from '../profile/profile.service';
 import { AwardsService } from '../awards/awards.service';
-import { XP_PER_COMPLETION } from 'src/core/utils/progression.utils';
+import { XP_PER_COMPLETION } from '../../core/utils/progression.utils';
 
 @Injectable()
 export class HabitService {

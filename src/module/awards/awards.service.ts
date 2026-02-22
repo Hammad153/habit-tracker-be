@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { DatabaseService } from 'src/core/database/database.service';
-import { calculateStreaks } from 'src/core/utils/streak.utils';
+import { DatabaseService } from '../../core/database/database.service';
+import { calculateStreaks } from '../../core/utils/streak.utils';
 
 @Injectable()
 export class AwardsService {

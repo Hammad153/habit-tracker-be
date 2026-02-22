@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { DatabaseService } from 'src/core/database/database.service';
+import { DatabaseService } from '../../core/database/database.service';
 import {
   calculateStreaks,
   calculatePerfectDays,
-} from 'src/core/utils/streak.utils';
-import { calculateNeededXp } from 'src/core/utils/progression.utils';
+} from '../../core/utils/streak.utils';
+import { calculateNeededXp } from '../../core/utils/progression.utils';
 
 @Injectable()
 export class ProfileService {

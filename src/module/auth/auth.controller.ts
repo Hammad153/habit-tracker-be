@@ -13,7 +13,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiProfileDocs, ApiLoginDocs, ApiSignUpDocs } from './auth.swagger';
-import { Public } from 'src/core/decorators/public.decorator';
+import { Public } from '../../core/decorators/public.decorator';
 
 @ApiTags('Auth')
 @ApiBearerAuth()
