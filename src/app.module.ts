@@ -16,7 +16,6 @@ import { TimelineModule } from './module/timeline/timeline.module';
 import { HabitModule } from './module/habit/habit.module';
 import { ConfigModule } from '@nestjs/config';
 import { MailerModule } from './module/mailer/mailer.module';
-import { PermissionModule } from './module/permission/permission.module';
 import { configValidationSchema } from './core/config/config.validation';
 import { JwtModule } from '@nestjs/jwt';
 
@@ -48,7 +47,6 @@ import { JwtModule } from '@nestjs/jwt';
     }),
     JwtModule.register({}),
     MailerModule,
-    PermissionModule,
     ProfileModule,
     HabitModule,
     TimelineModule,
