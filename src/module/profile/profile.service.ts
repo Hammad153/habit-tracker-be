@@ -1,5 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import { DatabaseService } from '../../core/database/database.service';
+import * as bcrypt from 'bcryptjs';
+import { SALT_ROUND } from '../../constants';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import {
   calculateStreaks,
   calculatePerfectDays,
@@ -107,6 +114,30 @@ export class ProfileService {
         xp: newXp,
         level: newLevel,
       },
+    });
+  }
+
+  public async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.databaseSvc.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) throw new UnauthorizedException('User not found');
+
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    const isMatch = await bcrypt.compare(dto.oldPassword, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Invalid current password');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, SALT_ROUND);
+
+    return this.databaseSvc.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
     });
   }
 }

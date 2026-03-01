@@ -45,7 +45,6 @@ import { JwtModule } from '@nestjs/jwt';
       isGlobal: true,
       validationSchema: configValidationSchema,
     }),
-    JwtModule.register({}),
     MailerModule,
     ProfileModule,
     HabitModule,
