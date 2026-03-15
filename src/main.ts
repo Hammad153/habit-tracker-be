@@ -1,15 +1,11 @@
-import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AllExcenptionFilter } from './all-exception.filter';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as express from 'express';
-import { AuthGuard } from './module/auth/auth.guard';
-import { JwtService } from '@nestjs/jwt';
-import { AuthService } from './module/auth/auth.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const reflector = app.get(Reflector);
 
   //app.useGlobalGuards(
   //  new AuthGuard(app.get(JwtService), app.get(AuthService), reflector),
@@ -34,7 +30,7 @@ async function bootstrap() {
         methodKey,
     });
 
-  SwaggerModule.setup('api', app, documentFactory, {
+  SwaggerModule.setup('api/v1/docs', app, documentFactory, {
     jsonDocumentUrl: 'swagger/json',
   });
 
