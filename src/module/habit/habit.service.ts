@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { Habit, Completion } from '@prisma/client';
 import { DatabaseService } from '../../core/database/database.service';
 import { ProfileService } from '../profile/profile.service';
 import { AwardsService } from '../awards/awards.service';
+import { SubscriptionService, TIER_HABIT_LIMITS } from '../subscription/subscription.service';
 import { XP_PER_COMPLETION } from '../../core/utils/progression.utils';
 
 @Injectable()
@@ -11,6 +12,7 @@ export class HabitService {
     private databaseSvc: DatabaseService,
     private profileSvc: ProfileService,
     private awardsSvc: AwardsService,
+    private subscriptionSvc: SubscriptionService,
   ) {}
 
   public async findAll(userId: string): Promise<Habit[]> {
@@ -30,6 +32,19 @@ export class HabitService {
   }
 
   public async createHabit(userId: string, data: any): Promise<Habit> {
+    const { canCreateHabit, tier, habitLimit, currentHabitCount } =
+      await this.subscriptionSvc.getUserTier(userId);
+
+    if (!canCreateHabit) {
+      throw new ForbiddenException({
+        message: `Free tier limit: ${habitLimit} habits. Upgrade to create more.`,
+        code: 'HABIT_LIMIT_REACHED',
+        tier,
+        habitLimit,
+        currentHabitCount,
+      });
+    }
+
     return this.databaseSvc.habit.create({
       data: {
         ...data,

@@ -14,6 +14,11 @@ import { ProfileModule } from './module/profile/profile.module';
 import { AwardsModule } from './module/awards/awards.module';
 import { TimelineModule } from './module/timeline/timeline.module';
 import { HabitModule } from './module/habit/habit.module';
+import { SubscriptionModule } from './module/subscription/subscription.module';
+import { ReminderModule } from './module/reminder/reminder.module';
+import { TemplateModule } from './module/template/template.module';
+import { ExportModule } from './module/export/export.module';
+import { AnalyticsModule } from './module/analytics/analytics.module';
 import { ConfigModule } from '@nestjs/config';
 import { MailerModule } from './module/mailer/mailer.module';
 import { configValidationSchema } from './core/config/config.validation';
@@ -51,6 +56,11 @@ import { JwtModule } from '@nestjs/jwt';
     HabitModule,
     TimelineModule,
     AwardsModule,
+    SubscriptionModule,
+    ReminderModule,
+    TemplateModule,
+    ExportModule,
+    AnalyticsModule,
   ],
   controllers: [AppController, UsersController],
   providers: [
