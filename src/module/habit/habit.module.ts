@@ -4,9 +4,10 @@ import { HabitController } from './habit.controller';
 import { DatabaseService } from '../../core/database/database.service';
 import { ProfileModule } from '../profile/profile.module';
 import { AwardsModule } from '../awards/awards.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
-  imports: [ProfileModule, AwardsModule],
+  imports: [ProfileModule, AwardsModule, SubscriptionModule],
   controllers: [HabitController],
   providers: [HabitService, DatabaseService],
 })
