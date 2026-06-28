@@ -9,6 +9,7 @@ import {
   Body,
   Param,
   Query,
+  ValidationPipe,
 } from '@nestjs/common';
 import { CreateHabitDto } from './dto/create-habit.dto';
 import { UpdateHabitDto } from './dto/update-habit.dto';
@@ -21,6 +22,12 @@ import {
   UpdateHabitDocs,
 } from './habit.swagger';
 import { ToggleCompletionDto } from './dto/toggle-completion.dto';
+
+const habitBodyPipe = new ValidationPipe({
+  whitelist: true,
+  transform: true,
+  forbidNonWhitelisted: false,
+});
 
 @ApiTags('Habits')
 @Controller('habit')
@@ -41,13 +48,16 @@ export class HabitController {
 
   @Post()
   @CreateHabitDocs()
-  createHabit(@Body() data: CreateHabitDto) {
+  createHabit(@Body(habitBodyPipe) data: CreateHabitDto) {
     return this.habitSvc.createHabit(data.userId || 'default-user', data);
   }
 
   @Patch(':id')
   @UpdateHabitDocs()
-  updateHabit(@Param('id') id: string, @Body() data: UpdateHabitDto) {
+  updateHabit(
+    @Param('id') id: string,
+    @Body(habitBodyPipe) data: UpdateHabitDto,
+  ) {
     return this.habitSvc.updateHabit(id, data);
   }
 
