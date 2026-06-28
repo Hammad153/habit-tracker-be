@@ -46,7 +46,11 @@ model Habit {
   iconColor   String
   iconBg      String
   category    String?
-  frequency   String?      // e.g., "Daily", "Weekdays"
+  frequency   String?      // e.g., "Daily", "Weekdays" (legacy)
+  scheduleType String?     // "daily" | "specific_days" | "times_per_week" | "interval"
+  scheduleDays String[]    @default([]) // e.g., ["Mon", "Wed", "Fri"]
+  timesPerWeek Int?        // used when scheduleType = "times_per_week"
+  intervalDays Int?        // used when scheduleType = "interval"
   priority    String?      // e.g., "High", "Medium", "Low"
   goal        Float        @default(1) // Target value (e.g., 30 pushups)
   unit        String?      @default("times") // Unit (e.g., reps, pages)
