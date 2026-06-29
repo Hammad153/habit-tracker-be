@@ -36,8 +36,7 @@ export class AuthService {
   async refreshToken(token: string) {
     try {
       const payload = await this.jwtSvc.verifyAsync(token, {
-        secret:
-          this.configSvc.get<string>('JWT_REFRESH_SECRET') || 'refresh-secret',
+        secret: this.configSvc.get<string>('JWT_REFRESH_SECRET'),
       });
 
       const isMatch = await this.userSvc.refreshTokenMatch(payload.sub, token);
@@ -75,8 +74,7 @@ export class AuthService {
     });
 
     const refresh_token = await this.jwtSvc.signAsync(payload, {
-      secret:
-        this.configSvc.get<string>('JWT_REFRESH_SECRET') || 'refresh-secret',
+      secret: this.configSvc.get<string>('JWT_REFRESH_SECRET'),
       expiresIn: (this.configSvc.get<string>('JWT_REFRESH_EXPIRES_IN') ||
         '7d') as any,
     });

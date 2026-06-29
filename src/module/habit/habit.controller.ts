@@ -1,5 +1,5 @@
 import { HabitService } from './habit.service';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   Controller,
   Delete,
@@ -8,8 +8,6 @@ import {
   Post,
   Body,
   Param,
-  Query,
-  ValidationPipe,
 } from '@nestjs/common';
 import { CreateHabitDto } from './dto/create-habit.dto';
 import { UpdateHabitDto } from './dto/update-habit.dto';
@@ -22,49 +20,46 @@ import {
   UpdateHabitDocs,
 } from './habit.swagger';
 import { ToggleCompletionDto } from './dto/toggle-completion.dto';
-
-const habitBodyPipe = new ValidationPipe({
-  whitelist: true,
-  transform: true,
-  forbidNonWhitelisted: false,
-});
+import { CurrentUser } from '../../core/decorators/current-user.decorator';
 
 @ApiTags('Habits')
+@ApiBearerAuth()
 @Controller('habit')
 export class HabitController {
   constructor(private readonly habitSvc: HabitService) {}
 
   @Get()
   @FindAllHabitsDocs()
-  findAll(@Query('userId') userId: string) {
-    return this.habitSvc.findAll(userId || 'default-user');
+  findAll(@CurrentUser() userId: string) {
+    return this.habitSvc.findAll(userId);
   }
 
   @Get(':id')
   @FindOneHabitDocs()
-  findOne(@Param('id') id: string) {
-    return this.habitSvc.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() userId: string) {
+    return this.habitSvc.findOne(id, userId);
   }
 
   @Post()
   @CreateHabitDocs()
-  createHabit(@Body(habitBodyPipe) data: CreateHabitDto) {
-    return this.habitSvc.createHabit(data.userId || 'default-user', data);
+  createHabit(@Body() data: CreateHabitDto, @CurrentUser() userId: string) {
+    return this.habitSvc.createHabit(userId, data);
   }
 
   @Patch(':id')
   @UpdateHabitDocs()
   updateHabit(
     @Param('id') id: string,
-    @Body(habitBodyPipe) data: UpdateHabitDto,
+    @Body() data: UpdateHabitDto,
+    @CurrentUser() userId: string,
   ) {
-    return this.habitSvc.updateHabit(id, data);
+    return this.habitSvc.updateHabit(id, userId, data);
   }
 
   @Delete(':id')
   @DeleteHabitDocs()
-  deleteHabit(@Param('id') id: string) {
-    return this.habitSvc.deleteHabit(id);
+  deleteHabit(@Param('id') id: string, @CurrentUser() userId: string) {
+    return this.habitSvc.deleteHabit(id, userId);
   }
 
   @Post(':id/toggle')
@@ -72,7 +67,8 @@ export class HabitController {
   toggleCompletion(
     @Param('id') id: string,
     @Body() { date, value }: ToggleCompletionDto,
+    @CurrentUser() userId: string,
   ) {
-    return this.habitSvc.toggleCompletion(id, date, value);
+    return this.habitSvc.toggleCompletion(id, userId, date, value);
   }
 }

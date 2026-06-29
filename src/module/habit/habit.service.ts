@@ -20,32 +20,46 @@ export class HabitService {
     });
   }
 
-  public async findOne(id: string): Promise<Habit> {
+  public async findOne(id: string, userId: string): Promise<Habit> {
     const habit = await this.databaseSvc.habit.findUnique({
       where: { id },
       include: { completions: true },
     });
     if (!habit) throw new NotFoundException(`Habit with ID ${id} not found`);
+    if (habit.userId !== userId) {
+      // Don't reveal existence of habits owned by other users.
+      throw new NotFoundException(`Habit with ID ${id} not found`);
+    }
     return habit;
   }
 
   public async createHabit(userId: string, data: any): Promise<Habit> {
+    // userId always comes from the authenticated token; never trust a userId
+    // supplied in the request body.
+    const { userId: _ignored, ...habitData } = data ?? {};
     return this.databaseSvc.habit.create({
       data: {
-        ...data,
+        ...habitData,
         userId,
       },
     });
   }
 
-  public async updateHabit(id: string, data: any): Promise<Habit> {
+  public async updateHabit(
+    id: string,
+    userId: string,
+    data: any,
+  ): Promise<Habit> {
+    await this.findOne(id, userId); // enforces ownership
+    const { userId: _ignored, ...habitData } = data ?? {};
     return this.databaseSvc.habit.update({
       where: { id },
-      data,
+      data: habitData,
     });
   }
 
-  public async deleteHabit(id: string): Promise<Habit> {
+  public async deleteHabit(id: string, userId: string): Promise<Habit> {
+    await this.findOne(id, userId); // enforces ownership
     return this.databaseSvc.habit.delete({
       where: { id },
     });
@@ -53,10 +67,11 @@ export class HabitService {
 
   public async toggleCompletion(
     habitId: string,
+    userId: string,
     date: string,
     value?: number,
   ): Promise<Completion> {
-    const habit = await this.findOne(habitId);
+    const habit = await this.findOne(habitId, userId);
     const existing = await this.databaseSvc.completion.findUnique({
       where: {
         habitId_date: { habitId, date },

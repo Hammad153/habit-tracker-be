@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import express from 'express';
 import { AppModule } from './src/app.module';
+import { configureApp } from './src/bootstrap';
 
 let cachedServer;
 
@@ -14,7 +15,9 @@ async function bootstrapServer() {
       AppModule,
       new ExpressAdapter(expressApp),
     );
-    app.enableCors();
+    // Apply the same security/validation/prefix as every other entry point.
+    // (Previously serverless only enabled CORS and skipped the global prefix.)
+    configureApp(app);
     await app.init();
     cachedServer = createServer(expressApp);
   }
