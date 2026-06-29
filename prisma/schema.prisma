@@ -10,7 +10,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-   url      = env("DATABASE_URL")
 }
 
 enum BadgeType {
@@ -90,4 +89,3 @@ model UserBadge {
 
   @@unique([userId, badgeId])
 }
-
