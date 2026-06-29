@@ -16,6 +16,8 @@ import { TimelineModule } from './module/timeline/timeline.module';
 import { HabitModule } from './module/habit/habit.module';
 import { ConfigModule } from '@nestjs/config';
 import { MailerModule } from './module/mailer/mailer.module';
+import { TemplateModule } from './module/template/template.module';
+import { SubscriptionModule } from './module/subscription/subscription.module';
 import { configValidationSchema } from './core/config/config.validation';
 import { JwtModule } from '@nestjs/jwt';
 
@@ -50,6 +52,8 @@ import { JwtModule } from '@nestjs/jwt';
     HabitModule,
     TimelineModule,
     AwardsModule,
+    TemplateModule,
+    SubscriptionModule,
   ],
   controllers: [AppController, UsersController],
   providers: [
