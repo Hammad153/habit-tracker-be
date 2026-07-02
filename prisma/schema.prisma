@@ -17,58 +17,64 @@ enum BadgeType {
   MILESTONE
 }
 
-enum SubscriptionTier {
-  FREE
-  BASIC
-  PREMIUM
-}
-
 model User {
-  id               String           @id @default(cuid())
-  name             String
-  email            String           @unique
-  password         String
-  refreshToken     String?
-  avatar           String?
-  pushToken        String?
-  level            Int              @default(1)
-  xp               Int              @default(0)
-  longestStreak    Int              @default(0)
-  totalHabits      Int              @default(0)
-  completionRate   Float            @default(0)
-  subscriptionTier SubscriptionTier @default(FREE)
-  habits           Habit[]
-  badges           UserBadge[]
-  reminders        Reminder[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id             String      @id @default(cuid())
+  name           String
+  email          String      @unique
+  password       String
+  refreshToken   String?
+  avatar         String?
+  pushToken      String?
+  level          Int         @default(1)
+  xp             Int         @default(0)
+  longestStreak  Int         @default(0)
+  totalHabits    Int         @default(0)
+  completionRate Float       @default(0)
+  habits         Habit[]
+  badges         UserBadge[]
+  reminders      Reminder[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 }
 
 model Habit {
-  id            String       @id @default(cuid())
-  userId        String
-  user          User         @relation(fields: [userId], references: [id])
-  title         String
-  subtitle      String?
-  icon          String
-  iconColor     String
-  iconBg        String
-  category      String?
-  frequency     String?      // e.g., "Daily", "Weekdays"
-  priority      String?      // e.g., "High", "Medium", "Low"
-  goal          Float        @default(1)
-  unit          String?      @default("times")
-  isArchived    Boolean      @default(false)
-  scheduleType  String?      @default("daily") // "daily", "specific_days", "times_per_week", "interval"
-  scheduleDays  String[]     // e.g., ["Mon", "Wed", "Fri"]
-  timesPerWeek  Int?         // e.g., 3 (for "times_per_week" type)
-  intervalDays  Int?         // e.g., 2 (for "interval" / every N days)
-  restDays      String[]     // planned rest day dates YYYY-MM-DD
-  tags          String[]     // user-defined tags for organization
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  completions   Completion[]
-  reminders     Reminder[]
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id])
+  title       String
+  subtitle    String?
+  icon        String
+  iconColor   String
+  iconBg      String
+  category    String?
+  frequency   String?      // e.g., "Daily", "Weekdays" (legacy)
+  scheduleType String?     // "daily" | "specific_days" | "times_per_week" | "interval"
+  scheduleDays String[]    @default([]) // e.g., ["Mon", "Wed", "Fri"]
+  timesPerWeek Int?        // used when scheduleType = "times_per_week"
+  intervalDays Int?        // used when scheduleType = "interval"
+  priority    String?      // e.g., "High", "Medium", "Low"
+  goal        Float        @default(1) // Target value (e.g., 30 pushups)
+  unit        String?      @default("times") // Unit (e.g., reps, pages)
+  isArchived  Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  completions Completion[]
+  reminders   Reminder[]
+}
+
+model Reminder {
+  id        String   @id @default(cuid())
+  userId    String
+  habitId   String
+  time      String   // Format: HH:mm (e.g., "08:00")
+  days      String[] // e.g., ["Mon", "Tue", "Wed", "Thu", "Fri"]
+  enabled   Boolean  @default(true)
+  user      User     @relation(fields: [userId], references: [id])
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([habitId])
 }
 
 model Completion {
@@ -100,34 +106,4 @@ model UserBadge {
   badge    Badge    @relation(fields: [badgeId], references: [id])
 
   @@unique([userId, badgeId])
-}
-
-model Reminder {
-  id        String   @id @default(cuid())
-  userId    String
-  habitId   String
-  time      String   // Format: HH:mm (e.g., "08:00")
-  days      String[] // e.g., ["Mon", "Tue", "Wed", "Thu", "Fri"]
-  enabled   Boolean  @default(true)
-  user      User     @relation(fields: [userId], references: [id])
-  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([habitId])
-}
-
-model HabitTemplate {
-  id        String           @id @default(cuid())
-  title     String
-  subtitle  String?
-  icon      String
-  iconColor String
-  iconBg    String
-  category  String           // e.g., "Fitness", "Mindfulness", "Productivity"
-  frequency String?          @default("Daily")
-  goal      Float            @default(1)
-  unit      String?          @default("times")
-  tier      SubscriptionTier @default(FREE)
-  sortOrder Int              @default(0)
 }
