@@ -86,9 +86,6 @@ importers:
       express:
         specifier: ^5.2.1
         version: 5.2.1
-      g:
-        specifier: ^2.0.1
-        version: 2.0.1
       handlebars:
         specifier: ^4.7.8
         version: 4.7.8
@@ -4210,9 +4207,6 @@ packages:
 
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
-
-  g@2.0.1:
-    resolution: {integrity: sha512-Fi6Ng5fZ/ANLQ15H11hCe+09sgUoNvDEBevVgx3KoYOhsH5iLNPn54hx0jPZ+3oSWr+xajnp2Qau9VmPsc7hTA==}
 
   generate-function@2.3.1:
     resolution: {integrity: sha512-eeB5GfMNeevm/GRYq20ShmsaGcmI81kIX2K9XQx5miC8KdHaC6Jm0qQ8ZNeGOi7wYB8OsdxKs+Y2oVuTFuVwKQ==}
@@ -11486,8 +11480,6 @@ snapshots:
     optional: true
 
   function-bind@1.1.2: {}
-
-  g@2.0.1: {}
 
   generate-function@2.3.1:
     dependencies:
