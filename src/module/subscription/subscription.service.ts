@@ -1,54 +1,45 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { SubscriptionTier } from '@prisma/client';
+import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../core/database/database.service';
 
-export const TIER_HABIT_LIMITS: Record<SubscriptionTier, number> = {
-  FREE: 5,
-  BASIC: Infinity,
-  PREMIUM: Infinity,
-};
+export type SubscriptionTier = 'FREE' | 'BASIC' | 'PREMIUM';
+
+export interface SubscriptionInfo {
+  tier: SubscriptionTier;
+  habitLimit: number; // -1 means unlimited
+  currentHabitCount: number;
+  canCreateHabit: boolean;
+}
 
 @Injectable()
 export class SubscriptionService {
-  constructor(private databaseSvc: DatabaseService) {}
+  constructor(private readonly databaseSvc: DatabaseService) {}
 
-  public async getUserTier(userId: string): Promise<{
-    tier: SubscriptionTier;
-    habitLimit: number;
-    currentHabitCount: number;
-    canCreateHabit: boolean;
-  }> {
-    const user = await this.databaseSvc.user.findUnique({
-      where: { id: userId },
-      select: { subscriptionTier: true },
-    });
-
-    if (!user) throw new NotFoundException(`User ${userId} not found`);
-
-    const habitCount = await this.databaseSvc.habit.count({
-      where: { userId, isArchived: false },
-    });
-
-    const limit = TIER_HABIT_LIMITS[user.subscriptionTier];
+  // The app is free to use: every user gets unlimited habits and full access,
+  // so they never have to subscribe before using the app effectively.
+  private async buildInfo(
+    userId: string,
+    tier: SubscriptionTier,
+  ): Promise<SubscriptionInfo> {
+    let currentHabitCount = 0;
+    if (userId) {
+      currentHabitCount = await this.databaseSvc.habit.count({
+        where: { userId, isArchived: false },
+      });
+    }
 
     return {
-      tier: user.subscriptionTier,
-      habitLimit: limit === Infinity ? -1 : limit, // -1 means unlimited
-      currentHabitCount: habitCount,
-      canCreateHabit: habitCount < limit,
+      tier,
+      habitLimit: -1,
+      currentHabitCount,
+      canCreateHabit: true,
     };
   }
 
-  public async updateTier(
-    userId: string,
-    tier: SubscriptionTier,
-  ): Promise<{ tier: SubscriptionTier }> {
-    const user = await this.databaseSvc.user.update({
-      where: { id: userId },
-      data: { subscriptionTier: tier },
-      select: { subscriptionTier: true },
-    });
+  get(userId: string): Promise<SubscriptionInfo> {
+    return this.buildInfo(userId || 'default-user', 'FREE');
+  }
 
-    return { tier: user.subscriptionTier };
+  update(userId: string, tier: SubscriptionTier): Promise<SubscriptionInfo> {
+    return this.buildInfo(userId || 'default-user', tier || 'FREE');
   }
 }

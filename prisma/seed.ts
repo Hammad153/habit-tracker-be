@@ -1,6 +1,7 @@
 import { PrismaClient, BadgeType } from '@prisma/client';
+import { prismaClientOptions } from '../src/core/database/prisma-client-options';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient(prismaClientOptions);
 
 async function main() {
   const user = await prisma.user.upsert({

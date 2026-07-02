@@ -8,10 +8,11 @@ export class TemplateController {
   constructor(private readonly templateSvc: TemplateService) {}
 
   @Get()
-  findAll() {
-    return this.templateSvc.findAll();
+  findAll(@Query('category') category?: string) {
+    return this.templateSvc.findAll(category);
   }
 
+  // Declared before ':id' so it is not swallowed by the param route.
   @Get('categories')
   getCategories() {
     return this.templateSvc.getCategories();

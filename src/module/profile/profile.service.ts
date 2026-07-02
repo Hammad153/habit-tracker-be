@@ -1,5 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DatabaseService } from '../../core/database/database.service';
+import * as bcrypt from 'bcryptjs';
+import { SALT_ROUND } from '../../constants';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import {
   calculateStreaks,
   calculatePerfectDays,
@@ -23,21 +32,7 @@ export class ProfileService {
     });
 
     if (!user) {
-      const newUser = await this.databaseSvc.user.create({
-        data: {
-          id: userId,
-          name: 'Hammad Ismail',
-          email: 'hammadismail2005@gmail.com',
-          password: 'Welcome123',
-        },
-      });
-      return {
-        ...newUser,
-        totalHabits: 0,
-        longestStreak: 0,
-        completionRate: 0,
-        perfectDays: 0,
-      };
+      throw new NotFoundException('User not found');
     }
 
     const totalHabits = user.habits.length;
@@ -75,11 +70,16 @@ export class ProfileService {
     };
   }
 
-  public async updateProfile(userId: string, data: any) {
-    return this.databaseSvc.user.update({
+  public async updateProfile(userId: string, data: UpdateProfileDto) {
+    const user = await this.databaseSvc.user.update({
       where: { id: userId },
-      data,
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.avatar !== undefined ? { avatar: data.avatar } : {}),
+      },
     });
+    const { password, refreshToken, ...safe } = user;
+    return safe;
   }
 
   public async addExperience(userId: string, amount: number) {
@@ -107,6 +107,30 @@ export class ProfileService {
         xp: newXp,
         level: newLevel,
       },
+    });
+  }
+
+  public async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.databaseSvc.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) throw new UnauthorizedException('User not found');
+
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    const isMatch = await bcrypt.compare(dto.oldPassword, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Invalid current password');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, SALT_ROUND);
+
+    return this.databaseSvc.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
     });
   }
 }

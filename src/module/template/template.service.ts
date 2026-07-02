@@ -1,36 +1,27 @@
-import { Injectable } from '@nestjs/common';
-import { HabitTemplate, SubscriptionTier } from '@prisma/client';
-import { DatabaseService } from '../../core/database/database.service';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { HABIT_TEMPLATES, HabitTemplate } from './template.data';
 
 @Injectable()
 export class TemplateService {
-  constructor(private databaseSvc: DatabaseService) {}
-
-  public async findAll(tier?: SubscriptionTier): Promise<HabitTemplate[]> {
-    return this.databaseSvc.habitTemplate.findMany({
-      orderBy: { sortOrder: 'asc' },
-    });
+  findAll(category?: string): HabitTemplate[] {
+    const templates = [...HABIT_TEMPLATES].sort(
+      (a, b) => a.sortOrder - b.sortOrder,
+    );
+    if (category && category !== 'All') {
+      return templates.filter((tpl) => tpl.category === category);
+    }
+    return templates;
   }
 
-  public async findByCategory(category: string): Promise<HabitTemplate[]> {
-    return this.databaseSvc.habitTemplate.findMany({
-      where: { category },
-      orderBy: { sortOrder: 'asc' },
-    });
+  getCategories(): string[] {
+    return [...new Set(HABIT_TEMPLATES.map((tpl) => tpl.category))];
   }
 
-  public async findOne(id: string): Promise<HabitTemplate | null> {
-    return this.databaseSvc.habitTemplate.findUnique({
-      where: { id },
-    });
-  }
-
-  public async getCategories(): Promise<string[]> {
-    const templates = await this.databaseSvc.habitTemplate.findMany({
-      select: { category: true },
-      distinct: ['category'],
-      orderBy: { sortOrder: 'asc' },
-    });
-    return templates.map((t) => t.category);
+  findOne(id: string): HabitTemplate {
+    const template = HABIT_TEMPLATES.find((tpl) => tpl.id === id);
+    if (!template) {
+      throw new NotFoundException(`Template with ID ${id} not found`);
+    }
+    return template;
   }
 }

@@ -1,96 +1,143 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
+
+export const SCHEDULE_TYPES = [
+  'daily',
+  'specific_days',
+  'times_per_week',
+  'interval',
+] as const;
 
 export class CreateHabitDto {
   @ApiProperty({
     example: 'Drink Water',
     description: 'The title of the habit',
   })
-  title: string;
+  @IsString()
+  @IsNotEmpty()
+  title!: string;
 
   @ApiPropertyOptional({
     example: 'Stay hydrated',
-    description: 'The description of the habit',
+    description: 'Short subtitle / description of the habit',
   })
-  description?: string;
+  @IsOptional()
+  @IsString()
+  subtitle?: string;
 
-  @ApiPropertyOptional({ example: '💧', description: 'The icon of the habit' })
-  icon?: string;
+  @ApiProperty({ example: 'water', description: 'The icon of the habit' })
+  @IsString()
+  @IsNotEmpty()
+  icon!: string;
+
+  @ApiProperty({
+    example: '#3B82F6',
+    description: 'The icon foreground color',
+  })
+  @IsString()
+  @IsNotEmpty()
+  iconColor!: string;
+
+  @ApiProperty({
+    example: 'rgba(255,255,255,0.1)',
+    description: 'The icon background color',
+  })
+  @IsString()
+  @IsNotEmpty()
+  iconBg!: string;
 
   @ApiPropertyOptional({
-    example: '#3B82F6',
-    description: 'The color of the habit',
+    example: 'Health',
+    description: 'The category of the habit',
   })
-  color?: string;
+  @IsOptional()
+  @IsString()
+  category?: string;
 
   @ApiPropertyOptional({
     example: 'Daily',
-    description: 'The frequency of the habit',
+    description: 'Legacy free-text frequency label',
   })
+  @IsOptional()
+  @IsString()
   frequency?: string;
+
+  @ApiPropertyOptional({
+    example: 'daily',
+    enum: SCHEDULE_TYPES,
+    description: 'How the habit is scheduled',
+  })
+  @IsOptional()
+  @IsIn(SCHEDULE_TYPES)
+  scheduleType?: string;
+
+  @ApiPropertyOptional({
+    example: ['Mon', 'Wed', 'Fri'],
+    description: 'Days the habit runs when scheduleType = "specific_days"',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  scheduleDays?: string[];
+
+  @ApiPropertyOptional({
+    example: 3,
+    description: 'Target count when scheduleType = "times_per_week"',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  timesPerWeek?: number;
+
+  @ApiPropertyOptional({
+    example: 2,
+    description: 'Gap in days when scheduleType = "interval"',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  intervalDays?: number;
 
   @ApiPropertyOptional({
     example: 'High',
     description: 'The priority of the habit',
   })
+  @IsOptional()
+  @IsString()
   priority?: string;
-
-  @ApiPropertyOptional({
-    example: 'user-id',
-    description: 'The ID of the user owning the habit',
-  })
-  userId?: string;
-
-  @ApiProperty({
-    example: '#3B82F6',
-    description: 'The color of the icon',
-  })
-  iconColor: string;
-
-  @ApiProperty({
-    example: 'rgba(255,255,255,0.1)',
-    description: 'The background color of the icon',
-  })
-  iconBg: string;
 
   @ApiPropertyOptional({
     example: 30,
     description: 'The daily goal value',
   })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   goal?: number;
 
   @ApiPropertyOptional({
     example: 'pushups',
     description: 'The unit for the goal',
   })
+  @IsOptional()
+  @IsString()
   unit?: string;
 
   @ApiPropertyOptional({
-    example: 'daily',
-    description: 'Schedule type: daily, specific_days, times_per_week, interval',
+    example: 'user-id',
+    description: 'The ID of the user owning the habit',
   })
-  scheduleType?: string;
-
-  @ApiPropertyOptional({
-    example: ['Mon', 'Wed', 'Fri'],
-    description: 'Days of the week for specific_days schedule',
-  })
-  scheduleDays?: string[];
-
-  @ApiPropertyOptional({
-    example: 3,
-    description: 'Number of times per week for times_per_week schedule',
-  })
-  timesPerWeek?: number;
-
-  @ApiPropertyOptional({
-    example: 2,
-    description: 'Interval in days for interval schedule',
-  })
-  intervalDays?: number;
-
-  @ApiPropertyOptional({
-    example: ['2026-03-30'],
-    description: 'Planned rest day dates (YYYY-MM-DD)',
-  })
-  restDays?: string[];
+  @IsOptional()
+  @IsString()
+  userId?: string;
 }

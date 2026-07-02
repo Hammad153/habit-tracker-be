@@ -14,6 +14,8 @@ import {
 } from '@nestjs/common';
 import { ApiProfileDocs, ApiLoginDocs, ApiSignUpDocs } from './auth.swagger';
 import { Public } from '../../core/decorators/public.decorator';
+import { LoginDto } from './dto/login.dto';
+import { SignUpDto } from './dto/signup.dto';
 
 @ApiTags('Auth')
 @ApiBearerAuth()
@@ -25,14 +27,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post('login')
   @ApiLoginDocs()
-  signIn(@Body() signInDto: any) {
+  signIn(@Body() signInDto: LoginDto) {
     return this.authService.signIn(signInDto.email, signInDto.password);
   }
 
   @Public()
   @Post('signup')
   @ApiSignUpDocs()
-  signUp(@Body() signUpDto: any) {
+  signUp(@Body() signUpDto: SignUpDto) {
     return this.authService.signUp(signUpDto);
   }
 

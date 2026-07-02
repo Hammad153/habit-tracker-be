@@ -1,13 +1,15 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param } from '@nestjs/common';
 import { AwardsService } from './awards.service';
 import {
   FindAllAwardsDocs,
   FindOneAwardDocs,
   FindUserBadgesDocs,
 } from './award.swagger';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../../core/decorators/current-user.decorator';
 
 @ApiTags('Awards')
+@ApiBearerAuth()
 @Controller('awards')
 export class AwardsController {
   constructor(private readonly awardsService: AwardsService) {}
@@ -20,8 +22,8 @@ export class AwardsController {
 
   @Get('user')
   @FindUserBadgesDocs()
-  findUserBadges(@Query('userId') userId: string) {
-    return this.awardsService.findUserBadges(userId || 'default-user');
+  findUserBadges(@CurrentUser() userId: string) {
+    return this.awardsService.findUserBadges(userId);
   }
 
   @Get(':id')

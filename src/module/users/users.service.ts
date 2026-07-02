@@ -59,6 +59,21 @@ export class UsersService {
     });
   }
 
+  /**
+   * Permanently deletes a user and all of their data. Runs in a transaction:
+   * badges and habits are removed first (habits cascade to their completions),
+   * then the user row itself. Required for privacy / app-store compliance.
+   */
+  public async deleteAccount(userId: string): Promise<void> {
+    // Sequential deletes rather than $transaction([...]) — the pooled PrismaPg
+    // adapter against the hosted DB times out acquiring a batch transaction.
+    // Children are removed before the parent; deleting a habit cascades to its
+    // completions at the DB level (Completion.onDelete = Cascade).
+    await this.databaseSvc.userBadge.deleteMany({ where: { userId } });
+    await this.databaseSvc.habit.deleteMany({ where: { userId } });
+    await this.databaseSvc.user.delete({ where: { id: userId } });
+  }
+
   public async refreshTokenMatch(
     userId: string,
     providedToken: string,

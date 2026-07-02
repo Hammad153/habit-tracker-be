@@ -1,26 +1,14 @@
-import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { AllExcenptionFilter } from './all-exception.filter';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import * as express from 'express';
-import { AuthGuard } from './module/auth/auth.guard';
-import { JwtService } from '@nestjs/jwt';
-import { AuthService } from './module/auth/auth.service';
+import { configureApp } from './bootstrap';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const reflector = app.get(Reflector);
 
-  //app.useGlobalGuards(
-  //  new AuthGuard(app.get(JwtService), app.get(AuthService), reflector),
-  //);
-  const { httpAdapter } = app.get(HttpAdapterHost);
-
-  app.use(express.json());
-  app.use('/uploads', express.static('uploads'));
-  app.useGlobalFilters(new AllExcenptionFilter(httpAdapter));
-  app.enableCors();
-  app.setGlobalPrefix('api/v1');
+  // Security middleware, validation, error filter, CORS and routing prefix.
+  // Authentication is enforced globally via APP_GUARD (see app.module.ts).
+  configureApp(app);
 
   const config = new DocumentBuilder()
     .setTitle('Habit Tracker')
@@ -34,7 +22,7 @@ async function bootstrap() {
         methodKey,
     });
 
-  SwaggerModule.setup('api', app, documentFactory, {
+  SwaggerModule.setup('api/v1/docs', app, documentFactory, {
     jsonDocumentUrl: 'swagger/json',
   });
 

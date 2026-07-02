@@ -1,20 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsString } from 'class-validator';
-import { SubscriptionTier } from '@prisma/client';
+import { IsIn } from 'class-validator';
+import type { SubscriptionTier } from '../subscription.service';
+
+export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
+  'FREE',
+  'BASIC',
+  'PREMIUM',
+];
 
 export class UpdateSubscriptionDto {
-  @ApiProperty({
-    example: 'user-id',
-    description: 'The ID of the user',
-  })
-  @IsString()
-  userId: string;
-
-  @ApiProperty({
-    enum: SubscriptionTier,
-    example: 'BASIC',
-    description: 'The subscription tier to set',
-  })
-  @IsEnum(SubscriptionTier)
+  @ApiProperty({ enum: SUBSCRIPTION_TIERS, example: 'PREMIUM' })
+  @IsIn(SUBSCRIPTION_TIERS)
   tier: SubscriptionTier;
 }

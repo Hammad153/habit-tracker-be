@@ -1,12 +1,16 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { TimelineService } from './timeline.service';
+import { CurrentUser } from '../../core/decorators/current-user.decorator';
 
+@ApiTags('Timeline')
+@ApiBearerAuth()
 @Controller('timeline')
 export class TimelineController {
   constructor(private readonly timelineService: TimelineService) {}
 
   @Get()
-  getTimeline(@Query('userId') userId: string) {
-    return this.timelineService.getTimeline(userId || 'default-user');
+  getTimeline(@CurrentUser() userId: string) {
+    return this.timelineService.getTimeline(userId);
   }
 }

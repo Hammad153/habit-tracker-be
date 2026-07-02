@@ -1,9 +1,9 @@
-import { NestFactory, HttpAdapterHost } from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import express, { Express } from 'express';
 import { AppModule } from '../src/app.module';
-import { AllExcenptionFilter } from '../src/all-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { configureApp } from '../src/bootstrap';
 
 const expressApp: Express = express();
 
@@ -13,13 +13,7 @@ const bootstrap = async () => {
     new ExpressAdapter(expressApp),
   );
 
-  const { httpAdapter } = app.get(HttpAdapterHost);
-
-  app.use(express.json());
-  app.use('/uploads', express.static('uploads'));
-  app.useGlobalFilters(new AllExcenptionFilter(httpAdapter));
-  app.enableCors();
-  app.setGlobalPrefix('api/v1');
+  configureApp(app);
 
   const config = new DocumentBuilder()
     .setTitle('Habit Tracker')
