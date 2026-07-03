@@ -5,7 +5,12 @@
       "src": "api/index.ts",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["src/**", "prisma/**", "tsconfig.json"]
+        "includeFiles": [
+          "src/**",
+          "prisma/**",
+          "tsconfig.json",
+          "node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/**"
+        ]
       }
     }
   ],
