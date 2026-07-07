@@ -18,6 +18,10 @@ export interface AnalyticsOverview {
   totalHabits: number;
   weeklyCompletionRate: number;
   monthlyCompletionRate: number;
+  dailyPlanCompletionRate: number;
+  monthlyExpenseTotal: number;
+  budgetUsagePercentage: number;
+  spendingByCategory: { category: string; total: number; color?: string; icon?: string }[];
   bestDay: string;
   dayDistribution: { day: string; count: number }[];
   habitStreaks: {
@@ -180,10 +184,60 @@ export class AnalyticsService {
       ([category, v]) => ({ category, ...v }),
     );
 
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const [monthlyExpenses, monthlyBudgets, recentPlans] = await Promise.all([
+      this.databaseSvc.expense.findMany({
+        where: { userId, expenseDate: { gte: monthStart, lte: monthEnd } },
+        include: { category: true },
+      }),
+      this.databaseSvc.budget.findMany({
+        where: {
+          userId,
+          startDate: { lte: monthEnd },
+          endDate: { gte: monthStart },
+        },
+      }),
+      this.databaseSvc.dailyPlan.findMany({
+        where: { userId, planDate: { gte: monthStart, lte: monthEnd } },
+        include: { tasks: true },
+      }),
+    ]);
+
+    const monthlyExpenseTotal = monthlyExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    const monthlyBudgetTotal = monthlyBudgets.reduce((sum, budget) => sum + budget.amount, 0);
+    const budgetUsagePercentage = monthlyBudgetTotal
+      ? Math.round((monthlyExpenseTotal / monthlyBudgetTotal) * 100)
+      : 0;
+    const planTasks = recentPlans.flatMap((plan) => plan.tasks);
+    const dailyPlanCompletionRate = planTasks.length
+      ? Math.round((planTasks.filter((task) => task.status === 'COMPLETED').length / planTasks.length) * 100)
+      : 0;
+    const spendingMap: Record<string, { total: number; color?: string; icon?: string }> = {};
+    monthlyExpenses.forEach((expense) => {
+      const category = expense.category?.name || 'Others';
+      spendingMap[category] = spendingMap[category] || {
+        total: 0,
+        color: expense.category?.color,
+        icon: expense.category?.icon,
+      };
+      spendingMap[category].total += expense.amount;
+    });
+    const spendingByCategory = Object.entries(spendingMap)
+      .map(([category, value]) => ({ category, ...value }))
+      .sort((a, b) => b.total - a.total);
+
     return {
       totalHabits,
       weeklyCompletionRate,
       monthlyCompletionRate,
+      dailyPlanCompletionRate,
+      monthlyExpenseTotal,
+      budgetUsagePercentage,
+      spendingByCategory,
       bestDay,
       dayDistribution,
       habitStreaks,

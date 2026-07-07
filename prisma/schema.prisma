@@ -17,6 +17,24 @@ enum BadgeType {
   MILESTONE
 }
 
+enum BudgetPeriodType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum DailyPlanTaskPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum DailyPlanTaskStatus {
+  PENDING
+  COMPLETED
+}
+
 model User {
   id             String      @id @default(cuid())
   name           String
@@ -33,6 +51,12 @@ model User {
   habits         Habit[]
   badges         UserBadge[]
   reminders      Reminder[]
+  budgets        Budget[]
+  expenses       Expense[]
+  incomes        Income[]
+  expenseCategories ExpenseCategory[]
+  dailyPlans     DailyPlan[]
+  dailyPlanTasks DailyPlanTask[]
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 }
@@ -60,6 +84,111 @@ model Habit {
   updatedAt   DateTime     @updatedAt
   completions Completion[]
   reminders   Reminder[]
+  dailyPlanTasks DailyPlanTask[]
+}
+
+model Budget {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  amount    Float
+  periodType BudgetPeriodType @default(MONTHLY)
+  startDate DateTime
+  endDate   DateTime
+  expenses  Expense[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([userId, startDate, endDate])
+}
+
+model ExpenseCategory {
+  id        String    @id @default(cuid())
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  icon      String?
+  color     String?
+  isDefault Boolean   @default(false)
+  expenses  Expense[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, name])
+  @@index([isDefault])
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  budgetId    String?
+  budget      Budget?         @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  categoryId  String
+  category    ExpenseCategory @relation(fields: [categoryId], references: [id])
+  title       String
+  amount      Float
+  note        String?
+  expenseDate DateTime
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([userId, expenseDate])
+  @@index([budgetId])
+  @@index([categoryId])
+}
+
+model Income {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  amount     Float
+  incomeDate DateTime
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, incomeDate])
+}
+
+model DailyPlan {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planDate  DateTime
+  title     String?
+  note      String?
+  tasks     DailyPlanTask[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([userId, planDate])
+  @@index([userId, planDate])
+}
+
+model DailyPlanTask {
+  id          String              @id @default(cuid())
+  userId      String
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyPlanId String
+  dailyPlan   DailyPlan           @relation(fields: [dailyPlanId], references: [id], onDelete: Cascade)
+  habitId     String?
+  habit       Habit?              @relation(fields: [habitId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  priority    DailyPlanTaskPriority @default(MEDIUM)
+  status      DailyPlanTaskStatus   @default(PENDING)
+  startTime   String?
+  endTime     String?
+  sortOrder   Int                 @default(0)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([userId])
+  @@index([dailyPlanId, sortOrder])
+  @@index([habitId])
 }
 
 model Reminder {
