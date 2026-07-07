@@ -84,18 +84,20 @@ export class BudgetService {
 
   private async ensureUserDefaults() {
     await Promise.all(
-      EXPENSE_CATEGORIES.map((name) =>
-        this.databaseSvc.expenseCategory.upsert({
-          where: { userId_name: { userId: null, name } },
-          update: {},
-          create: {
+      EXPENSE_CATEGORIES.map(async (name) => {
+        const existing = await this.databaseSvc.expenseCategory.findFirst({
+          where: { name, isDefault: true, userId: null },
+        });
+        if (existing) return existing;
+        return this.databaseSvc.expenseCategory.create({
+          data: {
             name,
             isDefault: true,
             icon: CATEGORY_META[name].icon,
             color: CATEGORY_META[name].color,
           },
-        }),
-      ),
+        });
+      }),
     );
   }
 
