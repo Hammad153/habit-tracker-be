@@ -43,20 +43,22 @@ export class ProfileService {
     const { currentStreak, longestStreak } = calculateStreaks(completionDates);
 
     // Calculate Perfect Days
-    const habitCompletionsList = user.habits.map((h) => h.completions);
-    const perfectDays = calculatePerfectDays(habitCompletionsList);
+    const perfectDays = calculatePerfectDays(user.habits);
 
     // Calculate Completion Rate
     let completionRate = 0;
     if (totalHabits > 0) {
-      const startDate = user.createdAt;
       const today = new Date();
-      const diffTime = Math.abs(today.getTime() - startDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-
-      completionRate =
-        allCompletions.filter((c) => c.status).length /
-        (totalHabits * diffDays);
+      let totalEligibleHabitDays = 0;
+      for (const h of user.habits) {
+        const hCreatedAt = h.createdAt || user.createdAt;
+        const diffTime = Math.abs(today.getTime() - hCreatedAt.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+        totalEligibleHabitDays += diffDays;
+      }
+      completionRate = totalEligibleHabitDays
+        ? allCompletions.filter((c) => c.status).length / totalEligibleHabitDays
+        : 0;
     }
 
     return {

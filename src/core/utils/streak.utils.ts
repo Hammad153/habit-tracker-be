@@ -75,25 +75,33 @@ export const calculateStreaks = (completionDates: string[]): StreakData => {
 };
 
 export const calculatePerfectDays = (
-  allHabitsCompletions: { date: string; status: boolean }[][],
+  habits: any[],
 ): number => {
+  if (habits.length === 0) return 0;
+
   const dayStatusMap: Record<string, number> = {};
-  const totalHabits = allHabitsCompletions.length;
 
-  if (totalHabits === 0) return 0;
-
-  allHabitsCompletions.forEach((habitCompletions) => {
-    const completedDates = new Set(
-      habitCompletions.filter((c) => c.status).map((c) => c.date),
+  habits.forEach((habit) => {
+    const completedDates = new Set<string>(
+      (habit.completions || [])
+        .filter((c: any) => c.status)
+        .map((c: any) => c.date as string),
     );
-    completedDates.forEach((date) => {
+    completedDates.forEach((date: string) => {
       dayStatusMap[date] = (dayStatusMap[date] || 0) + 1;
     });
   });
 
   let perfectDays = 0;
-  Object.values(dayStatusMap).forEach((count) => {
-    if (count === totalHabits) {
+  Object.entries(dayStatusMap).forEach(([date, count]) => {
+    let eligibleCount = 0;
+    habits.forEach((habit) => {
+      const createdAtStr = new Date(habit.createdAt).toISOString().split('T')[0];
+      if (createdAtStr <= date) {
+        eligibleCount++;
+      }
+    });
+    if (eligibleCount > 0 && count === eligibleCount) {
       perfectDays++;
     }
   });

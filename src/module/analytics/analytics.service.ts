@@ -48,6 +48,28 @@ export class AnalyticsService {
     const withinDays = (date: string, days: number) =>
       new Date(date).getTime() >= now - days * 86400000;
 
+    const toDateKey = (d: Date) => {
+      const year = d.getFullYear();
+      const month = `${d.getMonth() + 1}`.padStart(2, '0');
+      const day = `${d.getDate()}`.padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const normalizeDateKey = (date: string | Date) => {
+      if (date instanceof Date) return toDateKey(date);
+      return date.slice(0, 10);
+    };
+
+    const getLastNDays = (n: number) => {
+      const days: string[] = [];
+      for (let i = 0; i < n; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        days.push(toDateKey(d));
+      }
+      return days;
+    };
+
     // All "completed" entries (status = true) across every habit.
     const completed = habits.flatMap((h) =>
       h.completions.filter((c) => c.status),
@@ -55,11 +77,34 @@ export class AnalyticsService {
 
     const weeklyDone = completed.filter((c) => withinDays(c.date, 7)).length;
     const monthlyDone = completed.filter((c) => withinDays(c.date, 30)).length;
-    const weeklyCompletionRate = totalHabits
-      ? Math.min(100, Math.round((weeklyDone / (totalHabits * 7)) * 100))
+
+    let weeklyTotalEligibleDays = 0;
+    const weeklyDays = getLastNDays(7);
+    habits.forEach((h) => {
+      const createdKey = normalizeDateKey(h.createdAt);
+      weeklyDays.forEach((dayKey) => {
+        if (createdKey <= dayKey) {
+          weeklyTotalEligibleDays++;
+        }
+      });
+    });
+
+    let monthlyTotalEligibleDays = 0;
+    const monthlyDays = getLastNDays(30);
+    habits.forEach((h) => {
+      const createdKey = normalizeDateKey(h.createdAt);
+      monthlyDays.forEach((dayKey) => {
+        if (createdKey <= dayKey) {
+          monthlyTotalEligibleDays++;
+        }
+      });
+    });
+
+    const weeklyCompletionRate = weeklyTotalEligibleDays
+      ? Math.min(100, Math.round((weeklyDone / weeklyTotalEligibleDays) * 100))
       : 0;
-    const monthlyCompletionRate = totalHabits
-      ? Math.min(100, Math.round((monthlyDone / (totalHabits * 30)) * 100))
+    const monthlyCompletionRate = monthlyTotalEligibleDays
+      ? Math.min(100, Math.round((monthlyDone / monthlyTotalEligibleDays) * 100))
       : 0;
 
     // Distribution of completions across weekdays.
