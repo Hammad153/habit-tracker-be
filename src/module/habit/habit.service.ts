@@ -17,6 +17,7 @@ export class HabitService {
     return this.databaseSvc.habit.findMany({
       where: { userId },
       include: { completions: true },
+      orderBy: { updatedAt: 'desc' },
     });
   }
 
