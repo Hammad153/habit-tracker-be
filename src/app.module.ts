@@ -22,6 +22,7 @@ import { ExportModule } from './module/export/export.module';
 import { ReminderModule } from './module/reminder/reminder.module';
 import { BudgetModule } from './module/budget/budget.module';
 import { DailyPlanModule } from './module/daily-plan/daily-plan.module';
+import { JournalModule } from './module/journal/journal.module';
 import { configValidationSchema } from './core/config/config.validation';
 
 @Module({
@@ -52,6 +53,7 @@ import { configValidationSchema } from './core/config/config.validation';
     ReminderModule,
     BudgetModule,
     DailyPlanModule,
+    JournalModule,
   ],
   controllers: [AppController],
   providers: [
