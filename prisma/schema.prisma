@@ -93,14 +93,50 @@ model Budget {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   amount    Float
+  note      String?
   periodType BudgetPeriodType @default(MONTHLY)
   startDate DateTime
   endDate   DateTime
   expenses  Expense[]
+  // Per-week rows for WEEKLY budgets. `amount` above stays the source of truth
+  // for totals and is kept equal to the sum of these rows.
+  breakdowns BudgetBreakdown[]
+  // Optional per-category planning for MONTHLY / CUSTOM budgets.
+  allocations BudgetCategoryAllocation[]
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
   @@index([userId, startDate, endDate])
+}
+
+model BudgetBreakdown {
+  id        String   @id @default(cuid())
+  budgetId  String
+  budget    Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  label     String   // e.g. "Week 1"
+  startDate DateTime
+  endDate   DateTime
+  amount    Float
+  note      String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([budgetId, sortOrder])
+}
+
+model BudgetCategoryAllocation {
+  id         String          @id @default(cuid())
+  budgetId   String
+  budget     Budget          @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  amount     Float
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@unique([budgetId, categoryId])
+  @@index([budgetId])
 }
 
 model ExpenseCategory {
@@ -112,6 +148,7 @@ model ExpenseCategory {
   color     String?
   isDefault Boolean   @default(false)
   expenses  Expense[]
+  allocations BudgetCategoryAllocation[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 

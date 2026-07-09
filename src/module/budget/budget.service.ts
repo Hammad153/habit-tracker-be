@@ -6,6 +6,8 @@ import {
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../core/database/database.service';
 import {
+  BudgetAllocationDto,
+  BudgetBreakdownDto,
   CreateBudgetDto,
   CreateExpenseCategoryDto,
   CreateExpenseDto,
@@ -16,6 +18,16 @@ import {
   UpdateExpenseDto,
   UpdateIncomeDto,
 } from './dto/budget.dto';
+
+const BUDGET_INCLUDE = {
+  expenses: { include: { category: true } },
+  breakdowns: { orderBy: { sortOrder: 'asc' } },
+  allocations: { include: { category: true } },
+} satisfies Prisma.BudgetInclude;
+
+// Money is stored as a float, so compare totals with a sub-kobo tolerance
+// rather than exactly (0.1 + 0.2 > 0.3 would otherwise reject a valid budget).
+const MONEY_EPSILON = 0.005;
 
 const CATEGORY_META: Record<string, { icon: string; color: string }> = {
   Food: { icon: 'fast-food-outline', color: '#F97316' },
@@ -135,30 +147,194 @@ export class BudgetService {
     }
     return this.databaseSvc.budget.findMany({
       where,
-      include: { expenses: { include: { category: true } } },
+      include: BUDGET_INCLUDE,
       orderBy: { startDate: 'desc' },
     });
+  }
+
+  private async ensureCategories(userId: string, categoryIds: string[]) {
+    await Promise.all(categoryIds.map((id) => this.ensureCategory(userId, id)));
+  }
+
+  /**
+   * Applies the period-specific rules and returns the values that actually get
+   * persisted. For WEEKLY the parent `amount` is derived from the week rows so
+   * the stored total can never drift from the breakdown the user typed.
+   */
+  private normalizeBudget(input: {
+    periodType: string;
+    amount: number;
+    startDate: Date;
+    endDate: Date;
+    breakdowns?: BudgetBreakdownDto[];
+    allocations?: BudgetAllocationDto[];
+  }) {
+    const { periodType, startDate, endDate } = input;
+    if (endDate < startDate) {
+      throw new BadRequestException('Budget end date must be after start date');
+    }
+
+    // Week rows only make sense for a weekly budget; switching period drops them.
+    const breakdowns = periodType === 'WEEKLY' ? (input.breakdowns ?? []) : [];
+    let amount = input.amount;
+
+    if (periodType === 'WEEKLY') {
+      if (!breakdowns.length) {
+        throw new BadRequestException('A weekly budget needs at least one week');
+      }
+      breakdowns.forEach((week) => {
+        if (!(week.amount > 0)) {
+          throw new BadRequestException(`${week.label} needs an amount greater than 0`);
+        }
+        const weekStart = this.parseDate(week.startDate)!;
+        const weekEnd = this.parseDate(week.endDate)!;
+        if (weekEnd < weekStart) {
+          throw new BadRequestException(`${week.label} has an invalid date range`);
+        }
+      });
+      amount = breakdowns.reduce((sum, week) => sum + week.amount, 0);
+    }
+
+    if (!(amount > 0)) {
+      throw new BadRequestException('Budget amount must be greater than 0');
+    }
+
+    const allocations = input.allocations ?? [];
+    if (allocations.length) {
+      const unique = new Set(allocations.map((item) => item.categoryId));
+      if (unique.size !== allocations.length) {
+        throw new BadRequestException('A category can only be allocated once per budget');
+      }
+      allocations.forEach((item) => {
+        if (!(item.amount > 0)) {
+          throw new BadRequestException('Each category allocation must be greater than 0');
+        }
+      });
+      const allocated = allocations.reduce((sum, item) => sum + item.amount, 0);
+      if (allocated - amount > MONEY_EPSILON) {
+        throw new BadRequestException(
+          'Category allocations exceed the total budget amount',
+        );
+      }
+    }
+
+    return { amount, breakdowns, allocations };
+  }
+
+  private breakdownRows(breakdowns: BudgetBreakdownDto[]) {
+    return breakdowns.map((week, index) => ({
+      label: week.label,
+      startDate: this.parseDate(week.startDate)!,
+      endDate: this.parseDate(week.endDate)!,
+      amount: week.amount,
+      note: week.note?.trim() || null,
+      sortOrder: index,
+    }));
+  }
+
+  private allocationRows(allocations: BudgetAllocationDto[]) {
+    return allocations.map((item) => ({
+      categoryId: item.categoryId,
+      amount: item.amount,
+    }));
+  }
+
+  private normalizeNote(note?: string) {
+    if (note === undefined) return undefined;
+    return note.trim() || null;
   }
 
   async createBudget(userId: string, data: CreateBudgetDto) {
     const startDate = this.parseDate(data.startDate)!;
     const endDate = this.parseDate(data.endDate)!;
-    if (endDate < startDate) throw new BadRequestException('Budget end date must be after start date');
+    const { amount, breakdowns, allocations } = this.normalizeBudget({
+      periodType: data.periodType,
+      amount: data.amount,
+      startDate,
+      endDate,
+      breakdowns: data.breakdowns,
+      allocations: data.allocations,
+    });
+    await this.ensureCategories(userId, allocations.map((item) => item.categoryId));
+
     return this.databaseSvc.budget.create({
-      data: { ...data, userId, startDate, endDate, periodType: data.periodType as any },
+      data: {
+        userId,
+        title: data.title,
+        note: this.normalizeNote(data.note) ?? null,
+        periodType: data.periodType as any,
+        amount,
+        startDate,
+        endDate,
+        breakdowns: { create: this.breakdownRows(breakdowns) },
+        allocations: { create: this.allocationRows(allocations) },
+      },
+      include: BUDGET_INCLUDE,
     });
   }
 
   async updateBudget(userId: string, id: string, data: UpdateBudgetDto) {
     await this.ensureBudget(userId, id);
-    const startDate = this.parseDate(data.startDate);
-    const endDate = this.parseDate(data.endDate);
-    if (startDate && endDate && endDate < startDate) {
-      throw new BadRequestException('Budget end date must be after start date');
-    }
+    const existing = await this.databaseSvc.budget.findUniqueOrThrow({
+      where: { id },
+      include: { breakdowns: { orderBy: { sortOrder: 'asc' } }, allocations: true },
+    });
+
+    // A PATCH may omit any field, so fall back to what is already stored before
+    // re-running the period rules against the merged result.
+    const periodType = data.periodType ?? existing.periodType;
+    const startDate = this.parseDate(data.startDate, existing.startDate)!;
+    const endDate = this.parseDate(data.endDate, existing.endDate)!;
+    const breakdowns =
+      data.breakdowns ??
+      existing.breakdowns.map((week) => ({
+        label: week.label,
+        startDate: week.startDate.toISOString(),
+        endDate: week.endDate.toISOString(),
+        amount: week.amount,
+        note: week.note ?? undefined,
+      }));
+    const allocations =
+      data.allocations ??
+      existing.allocations.map((item) => ({
+        categoryId: item.categoryId,
+        amount: item.amount,
+      }));
+
+    const normalized = this.normalizeBudget({
+      periodType,
+      amount: data.amount ?? existing.amount,
+      startDate,
+      endDate,
+      breakdowns,
+      allocations,
+    });
+    await this.ensureCategories(
+      userId,
+      normalized.allocations.map((item) => item.categoryId),
+    );
+
     return this.databaseSvc.budget.update({
       where: { id },
-      data: { ...data, startDate, endDate, periodType: data.periodType as any },
+      data: {
+        title: data.title,
+        note: this.normalizeNote(data.note),
+        periodType: periodType as any,
+        amount: normalized.amount,
+        startDate,
+        endDate,
+        // Child rows are replaced wholesale so the stored set always matches
+        // the period that is being saved.
+        breakdowns: {
+          deleteMany: {},
+          create: this.breakdownRows(normalized.breakdowns),
+        },
+        allocations: {
+          deleteMany: {},
+          create: this.allocationRows(normalized.allocations),
+        },
+      },
+      include: BUDGET_INCLUDE,
     });
   }
 
