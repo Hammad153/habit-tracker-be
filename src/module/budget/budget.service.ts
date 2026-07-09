@@ -94,23 +94,31 @@ export class BudgetService {
     return income;
   }
 
+  /**
+   * Seeds the shared default categories once. This runs on every `categories()`
+   * call, so it costs a single SELECT and writes nothing in the common case.
+   *
+   * The missing names are computed here rather than relying on `skipDuplicates`:
+   * the unique index is on (userId, name), and Postgres treats NULL userIds as
+   * distinct, so duplicate defaults would slip through.
+   */
   private async ensureUserDefaults() {
-    await Promise.all(
-      EXPENSE_CATEGORIES.map(async (name) => {
-        const existing = await this.databaseSvc.expenseCategory.findFirst({
-          where: { name, isDefault: true, userId: null },
-        });
-        if (existing) return existing;
-        return this.databaseSvc.expenseCategory.create({
-          data: {
-            name,
-            isDefault: true,
-            icon: CATEGORY_META[name].icon,
-            color: CATEGORY_META[name].color,
-          },
-        });
-      }),
-    );
+    const existing = await this.databaseSvc.expenseCategory.findMany({
+      where: { isDefault: true, userId: null },
+      select: { name: true },
+    });
+    const present = new Set(existing.map((category) => category.name));
+    const missing = EXPENSE_CATEGORIES.filter((name) => !present.has(name));
+    if (!missing.length) return;
+
+    await this.databaseSvc.expenseCategory.createMany({
+      data: missing.map((name) => ({
+        name,
+        isDefault: true,
+        icon: CATEGORY_META[name].icon,
+        color: CATEGORY_META[name].color,
+      })),
+    });
   }
 
   async categories(userId: string) {

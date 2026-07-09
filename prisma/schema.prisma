@@ -57,8 +57,41 @@ model User {
   expenseCategories ExpenseCategory[]
   dailyPlans     DailyPlan[]
   dailyPlanTasks DailyPlanTask[]
+  journalEntries JournalEntry[]
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
+}
+
+enum JournalMood {
+  calm
+  happy
+  focused
+  grateful
+  tired
+  stressed
+  reflective
+}
+
+model JournalEntry {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title  String
+  // A calendar day (`YYYY-MM-DD`), not an instant. Stored as text so it round
+  // trips exactly: the client groups and filters entries by this value, and a
+  // DateTime would come back with a time component and a timezone to shift it.
+  date        String
+  mood        JournalMood
+  content     String
+  tags        String[]
+  isFavorite  Boolean     @default(false)
+  isPinned    Boolean     @default(false)
+  templateId  String?
+  attachments String[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([userId, date])
 }
 
 model Habit {
