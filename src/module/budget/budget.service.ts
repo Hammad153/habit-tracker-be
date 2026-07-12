@@ -8,6 +8,8 @@ import { DatabaseService } from '../../core/database/database.service';
 import {
   BudgetAllocationDto,
   BudgetBreakdownDto,
+  BUDGET_PERIOD_TYPES,
+  BudgetSummaryScope,
   CreateBudgetDto,
   CreateExpenseCategoryDto,
   CreateExpenseDto,
@@ -28,6 +30,12 @@ const BUDGET_INCLUDE = {
 // Money is stored as a float, so compare totals with a sub-kobo tolerance
 // rather than exactly (0.1 + 0.2 > 0.3 would otherwise reject a valid budget).
 const MONEY_EPSILON = 0.005;
+const PERIOD_PRIORITY: Record<string, number> = {
+  DAILY: 1,
+  WEEKLY: 2,
+  CUSTOM: 3,
+  MONTHLY: 4,
+};
 
 const CATEGORY_META: Record<string, { icon: string; color: string }> = {
   Food: { icon: 'fast-food-outline', color: '#F97316' },
@@ -53,6 +61,37 @@ export class BudgetService {
     return date;
   }
 
+  private dayStart(date: Date) {
+    const next = new Date(date);
+    next.setUTCHours(0, 0, 0, 0);
+    return next;
+  }
+
+  private dayEnd(date: Date) {
+    const next = new Date(date);
+    next.setUTCHours(23, 59, 59, 999);
+    return next;
+  }
+
+  private budgetContainsDate(
+    budget: { startDate: Date; endDate: Date },
+    date: Date,
+  ) {
+    return date >= this.dayStart(budget.startDate) && date <= this.dayEnd(budget.endDate);
+  }
+
+  private budgetDurationDays(budget: { startDate: Date; endDate: Date }) {
+    return Math.max(
+      1,
+      Math.ceil(
+        (this.dayEnd(budget.endDate).getTime() -
+          this.dayStart(budget.startDate).getTime() +
+          1) /
+          86400000,
+      ),
+    );
+  }
+
   private dateWhere(startDate?: string, endDate?: string) {
     const gte = this.parseDate(startDate);
     const lte = this.parseDate(endDate);
@@ -72,6 +111,31 @@ export class BudgetService {
     const budget = await this.databaseSvc.budget.findFirst({ where: { id, userId } });
     if (!budget) throw new NotFoundException(`Budget with ID ${id} not found`);
     return budget;
+  }
+
+  private async assertNoSameScopeOverlap(
+    userId: string,
+    input: {
+      periodType: string;
+      startDate: Date;
+      endDate: Date;
+      excludeBudgetId?: string;
+    },
+  ) {
+    const conflict = await this.databaseSvc.budget.findFirst({
+      where: {
+        userId,
+        periodType: input.periodType as any,
+        id: input.excludeBudgetId ? { not: input.excludeBudgetId } : undefined,
+        startDate: { lte: this.dayEnd(input.endDate) },
+        endDate: { gte: this.dayStart(input.startDate) },
+      },
+    });
+    if (conflict) {
+      throw new BadRequestException(
+        `A ${input.periodType.toLowerCase()} budget already overlaps this period`,
+      );
+    }
   }
 
   private async ensureCategory(userId: string, id: string) {
@@ -153,11 +217,12 @@ export class BudgetService {
     if (range) {
       where.AND = [{ startDate: { lte: range.lte } }, { endDate: { gte: range.gte } }];
     }
-    return this.databaseSvc.budget.findMany({
+    const budgets = await this.databaseSvc.budget.findMany({
       where,
       include: BUDGET_INCLUDE,
       orderBy: { startDate: 'desc' },
     });
+    return Promise.all(budgets.map((budget) => this.withBudgetCalculations(userId, budget)));
   }
 
   private async ensureCategories(userId: string, categoryIds: string[]) {
@@ -264,8 +329,13 @@ export class BudgetService {
       allocations: data.allocations,
     });
     await this.ensureCategories(userId, allocations.map((item) => item.categoryId));
+    await this.assertNoSameScopeOverlap(userId, {
+      periodType: data.periodType,
+      startDate,
+      endDate,
+    });
 
-    return this.databaseSvc.budget.create({
+    const budget = await this.databaseSvc.budget.create({
       data: {
         userId,
         title: data.title,
@@ -279,6 +349,7 @@ export class BudgetService {
       },
       include: BUDGET_INCLUDE,
     });
+    return this.withBudgetCalculations(userId, budget);
   }
 
   async updateBudget(userId: string, id: string, data: UpdateBudgetDto) {
@@ -321,34 +392,73 @@ export class BudgetService {
       userId,
       normalized.allocations.map((item) => item.categoryId),
     );
-
-    return this.databaseSvc.budget.update({
-      where: { id },
-      data: {
-        title: data.title,
-        note: this.normalizeNote(data.note),
-        periodType: periodType as any,
-        amount: normalized.amount,
-        startDate,
-        endDate,
-        // Child rows are replaced wholesale so the stored set always matches
-        // the period that is being saved.
-        breakdowns: {
-          deleteMany: {},
-          create: this.breakdownRows(normalized.breakdowns),
-        },
-        allocations: {
-          deleteMany: {},
-          create: this.allocationRows(normalized.allocations),
-        },
-      },
-      include: BUDGET_INCLUDE,
+    await this.assertNoSameScopeOverlap(userId, {
+      periodType,
+      startDate,
+      endDate,
+      excludeBudgetId: id,
     });
+
+    const updated = await this.databaseSvc.$transaction(async (tx) => {
+      const budget = await tx.budget.update({
+        where: { id },
+        data: {
+          title: data.title,
+          note: this.normalizeNote(data.note),
+          periodType: periodType as any,
+          amount: normalized.amount,
+          startDate,
+          endDate,
+          // Child rows are replaced wholesale so the stored set always matches
+          // the period that is being saved.
+          breakdowns: {
+            deleteMany: {},
+            create: this.breakdownRows(normalized.breakdowns),
+          },
+          allocations: {
+            deleteMany: {},
+            create: this.allocationRows(normalized.allocations),
+          },
+        },
+        include: BUDGET_INCLUDE,
+      });
+      const affected = await tx.expense.findMany({ where: { userId, budgetId: id } });
+      for (const expense of affected) {
+        if (!this.budgetContainsDate(budget, expense.expenseDate)) {
+          const nextBudget = await this.resolveBudgetForExpense({
+            userId,
+            expenseDate: expense.expenseDate,
+            db: tx,
+          });
+          await tx.expense.update({
+            where: { id: expense.id },
+            data: { budgetId: nextBudget?.id ?? null },
+          });
+        }
+      }
+      return budget;
+    });
+    return this.withBudgetCalculations(userId, updated);
   }
 
   async deleteBudget(userId: string, id: string) {
     await this.ensureBudget(userId, id);
-    return this.databaseSvc.budget.delete({ where: { id } });
+    return this.databaseSvc.$transaction(async (tx) => {
+      const affected = await tx.expense.findMany({ where: { userId, budgetId: id } });
+      const deleted = await tx.budget.delete({ where: { id } });
+      for (const expense of affected) {
+        const nextBudget = await this.resolveBudgetForExpense({
+          userId,
+          expenseDate: expense.expenseDate,
+          db: tx,
+        });
+        await tx.expense.update({
+          where: { id: expense.id },
+          data: { budgetId: nextBudget?.id ?? null },
+        });
+      }
+      return deleted;
+    });
   }
 
   async expenses(userId: string, startDate?: string, endDate?: string) {
@@ -361,25 +471,36 @@ export class BudgetService {
   }
 
   async createExpense(userId: string, data: CreateExpenseDto) {
-    await this.ensureBudget(userId, data.budgetId);
+    const expenseDate = this.parseDate(data.expenseDate)!;
+    const budget = await this.resolveBudgetForExpense({
+      userId,
+      expenseDate,
+      requestedBudgetId: data.budgetId,
+    });
     await this.ensureCategory(userId, data.categoryId);
     return this.databaseSvc.expense.create({
       data: {
         ...data,
         userId,
-        expenseDate: this.parseDate(data.expenseDate)!,
+        budgetId: budget?.id ?? null,
+        expenseDate,
       },
       include: { category: true, budget: true },
     });
   }
 
   async updateExpense(userId: string, id: string, data: UpdateExpenseDto) {
-    await this.ensureExpense(userId, id);
-    await this.ensureBudget(userId, data.budgetId);
+    const existing = await this.ensureExpense(userId, id);
+    const expenseDate = this.parseDate(data.expenseDate, existing.expenseDate)!;
+    const budget = await this.resolveBudgetForExpense({
+      userId,
+      expenseDate,
+      requestedBudgetId: data.budgetId,
+    });
     if (data.categoryId) await this.ensureCategory(userId, data.categoryId);
     return this.databaseSvc.expense.update({
       where: { id },
-      data: { ...data, expenseDate: this.parseDate(data.expenseDate) },
+      data: { ...data, budgetId: budget?.id ?? null, expenseDate },
       include: { category: true, budget: true },
     });
   }
@@ -416,7 +537,154 @@ export class BudgetService {
     return this.databaseSvc.income.delete({ where: { id } });
   }
 
-  async summary(userId: string, startDate?: string, endDate?: string) {
+  private async resolveBudgetForExpense({
+    userId,
+    expenseDate,
+    requestedBudgetId,
+    db = this.databaseSvc,
+  }: {
+    userId: string;
+    expenseDate: Date;
+    requestedBudgetId?: string | null;
+    db?: any;
+  }) {
+    if (requestedBudgetId) {
+      const requested = await db.budget.findFirst({
+        where: { id: requestedBudgetId, userId },
+      });
+      if (!requested) {
+        throw new NotFoundException(`Budget with ID ${requestedBudgetId} not found`);
+      }
+      if (!this.budgetContainsDate(requested, expenseDate)) {
+        throw new BadRequestException(
+          'Expense date falls outside the selected budget period',
+        );
+      }
+      return requested;
+    }
+
+    const candidates = await db.budget.findMany({
+      where: {
+        userId,
+        startDate: { lte: expenseDate },
+        endDate: { gte: expenseDate },
+      },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'asc' }],
+    });
+    if (!candidates.length) return null;
+
+    const ranked = candidates
+      .filter((budget) => this.budgetContainsDate(budget, expenseDate))
+      .sort((a, b) => {
+        const duration = this.budgetDurationDays(a) - this.budgetDurationDays(b);
+        if (duration !== 0) return duration;
+        const priority = PERIOD_PRIORITY[a.periodType] - PERIOD_PRIORITY[b.periodType];
+        if (priority !== 0) return priority;
+        return a.createdAt.getTime() - b.createdAt.getTime();
+      });
+    if (!ranked.length) return null;
+
+    const first = ranked[0];
+    const second = ranked[1];
+    if (
+      second &&
+      this.budgetDurationDays(first) === this.budgetDurationDays(second) &&
+      PERIOD_PRIORITY[first.periodType] === PERIOD_PRIORITY[second.periodType]
+    ) {
+      return null;
+    }
+    return first;
+  }
+
+  private async withBudgetCalculations(userId: string, budget: any) {
+    const start = this.dayStart(budget.startDate);
+    const end = this.dayEnd(budget.endDate);
+    const [periodIncome, periodExpenses] = await Promise.all([
+      this.databaseSvc.income.aggregate({
+        where: { userId, incomeDate: { gte: start, lte: end } },
+        _sum: { amount: true },
+      }),
+      this.databaseSvc.expense.findMany({
+        where: { userId, expenseDate: { gte: start, lte: end } },
+        include: { category: true },
+      }),
+    ]);
+    const linkedExpenses: any[] = budget.expenses ?? [];
+    const budgetedExpenseTotal = linkedExpenses.reduce(
+      (sum, item) => sum + item.amount,
+      0,
+    );
+    const totalPeriodExpenses = periodExpenses.reduce(
+      (sum, item) => sum + item.amount,
+      0,
+    );
+    const incomeTotal = periodIncome._sum.amount ?? 0;
+    const categoryBreakdown = linkedExpenses.reduce<Record<string, any>>(
+      (acc, item) => {
+        const key = item.categoryId || 'uncategorized';
+        acc[key] = acc[key] || {
+          categoryId: item.categoryId,
+          category: item.category?.name || 'Uncategorized',
+          total: 0,
+          color: item.category?.color,
+          icon: item.category?.icon,
+        };
+        acc[key].total += item.amount;
+        return acc;
+      },
+      {},
+    );
+    const dailyBreakdown = linkedExpenses.reduce<Record<string, number>>((acc, item) => {
+      const key = item.expenseDate.toISOString().slice(0, 10);
+      acc[key] = (acc[key] ?? 0) + item.amount;
+      return acc;
+    }, {});
+    const weeklyBreakdown = (budget.breakdowns ?? []).map((week) => {
+      const weekStart = this.dayStart(week.startDate);
+      const weekEnd = this.dayEnd(week.endDate);
+      const spent = linkedExpenses
+        .filter((expense) => expense.expenseDate >= weekStart && expense.expenseDate <= weekEnd)
+        .reduce((sum, expense) => sum + expense.amount, 0);
+      return {
+        ...week,
+        spent,
+        remainingAmount: week.amount - spent,
+        utilisationPercentage:
+          week.amount > 0 ? Math.round((spent / week.amount) * 100) : 0,
+      };
+    });
+
+    return {
+      ...budget,
+      plannedAmount: budget.amount,
+      budgetedExpenseTotal,
+      remainingAmount: budget.amount - budgetedExpenseTotal,
+      utilisationPercentage:
+        budget.amount > 0 ? Math.round((budgetedExpenseTotal / budget.amount) * 100) : 0,
+      overspentAmount: Math.max(budgetedExpenseTotal - budget.amount, 0),
+      periodIncome: incomeTotal,
+      totalPeriodExpenses,
+      netCashFlow: incomeTotal - totalPeriodExpenses,
+      categoryBreakdown: Object.values(categoryBreakdown),
+      dailyBreakdown: Object.entries(dailyBreakdown).map(([date, total]) => ({
+        date,
+        total,
+      })),
+      weeklyBreakdown,
+    };
+  }
+
+  private resolveSummaryScope(scope: string | undefined, budgets: any[]): BudgetSummaryScope {
+    if (scope && [...BUDGET_PERIOD_TYPES, 'AUTO'].includes(scope as any)) {
+      if (scope !== 'AUTO') return scope as BudgetSummaryScope;
+    }
+    if (budgets.some((budget) => budget.periodType === 'MONTHLY')) return 'MONTHLY';
+    if (budgets.some((budget) => budget.periodType === 'WEEKLY')) return 'WEEKLY';
+    if (budgets.some((budget) => budget.periodType === 'DAILY')) return 'DAILY';
+    return 'AUTO';
+  }
+
+  async summary(userId: string, startDate?: string, endDate?: string, scope?: string) {
     const fallback = this.currentMonthWindow();
     const start = this.parseDate(startDate, fallback.start)!;
     const end = this.parseDate(endDate, fallback.end)!;
@@ -425,24 +693,46 @@ export class BudgetService {
       this.expenses(userId, start.toISOString(), end.toISOString()),
       this.incomes(userId, start.toISOString(), end.toISOString()),
     ]);
-    const totalBudget = budgets.reduce((sum, item) => sum + item.amount, 0);
+    const selectedScope = this.resolveSummaryScope(scope, budgets);
+    const scopedBudgets =
+      selectedScope === 'AUTO'
+        ? []
+        : budgets.filter((budget) => budget.periodType === selectedScope);
+    const scopedBudgetIds = new Set(scopedBudgets.map((budget) => budget.id));
+    const totalBudget = scopedBudgets.reduce((sum, item) => sum + item.amount, 0);
     const totalExpenses = expenses.reduce((sum, item) => sum + item.amount, 0);
+    const budgetedExpenses = expenses.filter((item) =>
+      item.budgetId ? scopedBudgetIds.has(item.budgetId) : false,
+    );
+    const budgetedExpenseTotal = budgetedExpenses.reduce(
+      (sum, item) => sum + item.amount,
+      0,
+    );
+    const unbudgetedExpenseTotal = totalExpenses - budgetedExpenseTotal;
     const totalIncome = incomes.reduce((sum, item) => sum + item.amount, 0);
-    const byCategory = expenses.reduce<Record<string, { total: number; color?: string; icon?: string }>>((acc, item) => {
+    const byCategory = budgetedExpenses.reduce<Record<string, { total: number; color?: string; icon?: string }>>((acc, item) => {
       const key = item.category?.name || 'Others';
       acc[key] = acc[key] || { total: 0, color: item.category?.color, icon: item.category?.icon };
       acc[key].total += item.amount;
       return acc;
     }, {});
-    const budgetUsagePercentage = totalBudget > 0 ? Math.round((totalExpenses / totalBudget) * 100) : 0;
+    const budgetUsagePercentage = totalBudget > 0 ? Math.round((budgetedExpenseTotal / totalBudget) * 100) : 0;
     return {
       startDate: start.toISOString(),
       endDate: end.toISOString(),
+      scope: selectedScope,
       totalBudget,
+      plannedBudget: totalBudget,
       totalIncome,
       totalExpenses,
+      budgetedExpenses: budgetedExpenseTotal,
+      budgetedExpenseTotal,
+      unbudgetedExpenses: unbudgetedExpenseTotal,
+      unbudgetedExpenseTotal,
       remainingBalance: totalIncome - totalExpenses,
-      remainingBudget: totalBudget - totalExpenses,
+      netCashFlow: totalIncome - totalExpenses,
+      remainingBudget: totalBudget - budgetedExpenseTotal,
+      overspentAmount: Math.max(budgetedExpenseTotal - totalBudget, 0),
       budgetUsagePercentage,
       warning:
         totalBudget <= 0
@@ -452,7 +742,8 @@ export class BudgetService {
             : budgetUsagePercentage >= 80
               ? 'You are close to your budget limit.'
               : null,
-      budgets,
+      budgets: scopedBudgets,
+      allBudgets: budgets,
       categoryBreakdown: Object.entries(byCategory).map(([category, value]) => ({
         category,
         ...value,

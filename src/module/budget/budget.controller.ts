@@ -29,8 +29,13 @@ export class BudgetController {
   constructor(private readonly budgetSvc: BudgetService) {}
 
   @Get('summary')
-  summary(@CurrentUser() userId: string, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
-    return this.budgetSvc.summary(userId, startDate, endDate);
+  summary(
+    @CurrentUser() userId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('scope') scope?: string,
+  ) {
+    return this.budgetSvc.summary(userId, startDate, endDate, scope);
   }
 
   @Get('categories')

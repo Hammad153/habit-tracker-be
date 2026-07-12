@@ -15,6 +15,7 @@ import {
 } from 'class-validator';
 
 export const BUDGET_PERIOD_TYPES = ['DAILY', 'WEEKLY', 'MONTHLY', 'CUSTOM'] as const;
+export type BudgetSummaryScope = (typeof BUDGET_PERIOD_TYPES)[number] | 'AUTO';
 export const EXPENSE_CATEGORIES = [
   'Food',
   'Transport',
