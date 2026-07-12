@@ -208,9 +208,21 @@ export class AnalyticsService {
     ]);
 
     const monthlyExpenseTotal = monthlyExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-    const monthlyBudgetTotal = monthlyBudgets.reduce((sum, budget) => sum + budget.amount, 0);
+    const budgetScope = monthlyBudgets.some((budget) => budget.periodType === 'MONTHLY')
+      ? 'MONTHLY'
+      : monthlyBudgets.some((budget) => budget.periodType === 'WEEKLY')
+        ? 'WEEKLY'
+        : 'DAILY';
+    const scopedMonthlyBudgets = monthlyBudgets.filter(
+      (budget) => budget.periodType === budgetScope,
+    );
+    const scopedBudgetIds = new Set(scopedMonthlyBudgets.map((budget) => budget.id));
+    const monthlyBudgetedExpenseTotal = monthlyExpenses
+      .filter((expense) => expense.budgetId && scopedBudgetIds.has(expense.budgetId))
+      .reduce((sum, expense) => sum + expense.amount, 0);
+    const monthlyBudgetTotal = scopedMonthlyBudgets.reduce((sum, budget) => sum + budget.amount, 0);
     const budgetUsagePercentage = monthlyBudgetTotal
-      ? Math.round((monthlyExpenseTotal / monthlyBudgetTotal) * 100)
+      ? Math.round((monthlyBudgetedExpenseTotal / monthlyBudgetTotal) * 100)
       : 0;
     const planTasks = recentPlans.flatMap((plan) => plan.tasks);
     const dailyPlanCompletionRate = planTasks.length

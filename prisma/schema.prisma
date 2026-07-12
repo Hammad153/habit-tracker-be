@@ -140,6 +140,7 @@ model Budget {
   updatedAt DateTime         @updatedAt
 
   @@index([userId, startDate, endDate])
+  @@index([userId, periodType, startDate, endDate])
 }
 
 model BudgetBreakdown {
@@ -205,6 +206,7 @@ model Expense {
   updatedAt   DateTime        @updatedAt
 
   @@index([userId, expenseDate])
+  @@index([userId, budgetId, expenseDate])
   @@index([budgetId])
   @@index([categoryId])
 }
