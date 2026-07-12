@@ -37,7 +37,7 @@ describe('BudgetService', () => {
         findFirst: jest.fn().mockResolvedValue(category),
       },
       expense: {
-        create: jest.fn(async ({ data }) => ({ id: 'expense-1', ...data })),
+        create: jest.fn(({ data }) => Promise.resolve({ id: 'expense-1', ...data })),
       },
       ...overrides,
     };
