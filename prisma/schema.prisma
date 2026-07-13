@@ -33,6 +33,11 @@ enum DailyPlanTaskPriority {
 enum DailyPlanTaskStatus {
   PENDING
   COMPLETED
+  SKIPPED
+}
+
+enum CompletionSource {
+  DAILY_PLAN
 }
 
 model User {
@@ -254,6 +259,8 @@ model DailyPlanTask {
   status      DailyPlanTaskStatus   @default(PENDING)
   startTime   String?
   endTime     String?
+  durationMinutes Int?
+  completedAt DateTime?
   sortOrder   Int                 @default(0)
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
@@ -261,6 +268,7 @@ model DailyPlanTask {
   @@index([userId])
   @@index([dailyPlanId, sortOrder])
   @@index([habitId])
+  @@index([habitId, status])
 }
 
 model Reminder {
@@ -284,9 +292,12 @@ model Completion {
   date    String   // Format: YYYY-MM-DD
   status  Boolean  @default(true)
   value   Float    @default(1) // Actual progress value
+  source  CompletionSource?
+  sourceReferenceId String?
   habit   Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
 
   @@unique([habitId, date])
+  @@index([source, sourceReferenceId])
 }
 
 model Badge {
