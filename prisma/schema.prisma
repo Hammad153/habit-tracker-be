@@ -118,6 +118,8 @@ model Habit {
   goal        Float        @default(1) // Target value (e.g., 30 pushups)
   unit        String?      @default("times") // Unit (e.g., reps, pages)
   isArchived  Boolean      @default(false)
+  startDate   DateTime?    // Optional start date for temporary habits
+  endDate     DateTime?    // Optional end date - habit will be auto-deleted after this date
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   completions Completion[]

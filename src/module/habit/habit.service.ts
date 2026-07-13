@@ -14,6 +14,9 @@ export class HabitService {
   ) {}
 
   public async findAll(userId: string): Promise<Habit[]> {
+    // Clean up expired habits before returning
+    await this.cleanupExpiredHabits();
+
     return this.databaseSvc.habit.findMany({
       where: { userId },
       include: { completions: true },
@@ -38,9 +41,19 @@ export class HabitService {
     // userId always comes from the authenticated token; never trust a userId
     // supplied in the request body.
     const { userId: _ignored, ...habitData } = data ?? {};
+
+    // Convert date strings to Date objects if provided
+    const processedData = {
+      ...habitData,
+      startDate: habitData.startDate
+        ? new Date(habitData.startDate)
+        : undefined,
+      endDate: habitData.endDate ? new Date(habitData.endDate) : undefined,
+    };
+
     return this.databaseSvc.habit.create({
       data: {
-        ...habitData,
+        ...processedData,
         userId,
       },
     });
@@ -53,9 +66,19 @@ export class HabitService {
   ): Promise<Habit> {
     await this.findOne(id, userId); // enforces ownership
     const { userId: _ignored, ...habitData } = data ?? {};
+
+    // Convert date strings to Date objects if provided
+    const processedData = {
+      ...habitData,
+      startDate: habitData.startDate
+        ? new Date(habitData.startDate)
+        : undefined,
+      endDate: habitData.endDate ? new Date(habitData.endDate) : undefined,
+    };
+
     return this.databaseSvc.habit.update({
       where: { id },
-      data: habitData,
+      data: processedData,
     });
   }
 
@@ -64,6 +87,41 @@ export class HabitService {
     return this.databaseSvc.habit.delete({
       where: { id },
     });
+  }
+
+  /**
+   * Cleans up habits that have passed their endDate.
+   * This is called automatically when fetching habits, but can also be called manually.
+   */
+  public async cleanupExpiredHabits(): Promise<number> {
+    const now = new Date();
+
+    // Find all habits with endDate that has passed
+    const expiredHabits = await this.databaseSvc.habit.findMany({
+      where: {
+        endDate: {
+          not: null,
+          lt: now,
+        },
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+
+    if (expiredHabits.length === 0) {
+      return 0;
+    }
+
+    // Delete expired habits (cascades to completions and reminders)
+    const result = await this.databaseSvc.habit.deleteMany({
+      where: {
+        id: {
+          in: expiredHabits.map((h) => h.id),
+        },
+      },
+    });
+
+    return result.count;
   }
 
   public async toggleCompletion(
@@ -119,8 +177,8 @@ export class HabitService {
       }
 
       return completion;
-    } catch (error) {
-      if (error.code === 'P2002') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message.includes('P2002')) {
         const existingCompletion = await this.databaseSvc.completion.findUnique(
           {
             where: {

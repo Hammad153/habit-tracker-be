@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsDateString,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -140,4 +141,21 @@ export class CreateHabitDto {
   @IsOptional()
   @IsString()
   userId?: string;
+
+  @ApiPropertyOptional({
+    example: '2024-01-01T00:00:00.000Z',
+    description: 'Optional start date for temporary habits',
+  })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiPropertyOptional({
+    example: '2024-12-31T23:59:59.999Z',
+    description:
+      'Optional end date - habit will be auto-deleted after this date',
+  })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
 }

@@ -71,4 +71,10 @@ export class HabitController {
   ) {
     return this.habitSvc.toggleCompletion(id, userId, date, value);
   }
+
+  @Post('cleanup')
+  async cleanupExpiredHabits(@CurrentUser() userId: string) {
+    const count = await this.habitSvc.cleanupExpiredHabits();
+    return { message: `Cleaned up ${count} expired habit(s)`, count };
+  }
 }
