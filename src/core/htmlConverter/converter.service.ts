@@ -1,6 +1,6 @@
 import { join } from 'path';
 import { IHtmlTemplateContext } from './converter.interface';
-let ejs = require('ejs');
+const ejs = require('ejs');
 import { PuppeteerService } from '../puppetter';
 
 export class HtmlConverterService {

@@ -34,30 +34,52 @@ export class AuthService {
   }
 
   async refreshToken(token: string) {
+    if (!token) {
+      throw this.authError(
+        'REFRESH_TOKEN_INVALID',
+        'Your session has expired. Please sign in again.',
+      );
+    }
+
     try {
       const payload = await this.jwtSvc.verifyAsync(token, {
         secret: this.configSvc.get<string>('JWT_REFRESH_SECRET'),
       });
 
+      if (payload.token_type && payload.token_type !== 'refresh') {
+        throw this.authError(
+          'REFRESH_TOKEN_INVALID',
+          'Your session has expired. Please sign in again.',
+        );
+      }
+
       const isMatch = await this.userSvc.refreshTokenMatch(payload.sub, token);
       if (!isMatch)
-        throw new UnauthorizedException('Invalid or expired refresh token');
+        throw this.authError(
+          'REFRESH_TOKEN_REVOKED',
+          'Your session has expired. Please sign in again.',
+        );
 
       const user = await this.userSvc.findOne(payload.sub);
-      if (!user) throw new UnauthorizedException('User not found');
+      if (!user)
+        throw this.authError(
+          'SESSION_NOT_FOUND',
+          'Your session has expired. Please sign in again.',
+        );
 
-      const newAccessToken = await this.jwtSvc.signAsync(
-        { sub: user.id, email: user.email },
-        {
-          secret: this.configSvc.get<string>('JWT_SECRET'),
-          expiresIn: (this.configSvc.get<string>('JWT_EXPIRES_IN') ||
-            '1h') as any,
-        },
-      );
-
-      return { access_token: newAccessToken };
+      const tokens = await this.generateTokens(user);
+      await this.userSvc.updateRefreshToken(user.id, tokens.refresh_token);
+      return tokens;
     } catch (err: any) {
-      throw new UnauthorizedException('Invalid or expired refresh token', err);
+      if (err instanceof UnauthorizedException) throw err;
+      const code =
+        err?.name === 'TokenExpiredError'
+          ? 'REFRESH_TOKEN_EXPIRED'
+          : 'REFRESH_TOKEN_INVALID';
+      throw this.authError(
+        code,
+        'Your session has expired. Please sign in again.',
+      );
     }
   }
 
@@ -66,28 +88,45 @@ export class AuthService {
   }
 
   private async generateTokens(user: User) {
-    const payload = { sub: user.id, email: user.email };
+    const accessExpiresIn = (this.configSvc.get<string>('JWT_EXPIRES_IN') ||
+      '1h') as any;
+    const refreshExpiresIn = (this.configSvc.get<string>(
+      'JWT_REFRESH_EXPIRES_IN',
+    ) || '7d') as any;
 
-    const access_token = await this.jwtSvc.signAsync(payload, {
+    const access_token = await this.jwtSvc.signAsync({
+      sub: user.id,
+      email: user.email,
+      token_type: 'access',
+    }, {
       secret: this.configSvc.get<string>('JWT_SECRET'),
-      expiresIn: (this.configSvc.get<string>('JWT_EXPIRES_IN') || '1h') as any,
+      expiresIn: accessExpiresIn,
     });
 
-    const refresh_token = await this.jwtSvc.signAsync(payload, {
+    const refresh_token = await this.jwtSvc.signAsync({
+      sub: user.id,
+      email: user.email,
+      token_type: 'refresh',
+    }, {
       secret: this.configSvc.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: (this.configSvc.get<string>('JWT_REFRESH_EXPIRES_IN') ||
-        '7d') as any,
+      expiresIn: refreshExpiresIn,
     });
 
-    return { access_token, refresh_token };
+    return { access_token, refresh_token, expires_in: accessExpiresIn };
   }
 
   private sanitizeUser(user: User) {
-    const { password, refreshToken, ...rest } = user;
-    return rest;
+    const safe = { ...user } as Partial<User>;
+    delete safe.password;
+    delete safe.refreshToken;
+    return safe;
   }
 
   public getJwtSecret() {
     return this.configSvc.get<string>('JWT_SECRET');
+  }
+
+  private authError(code: string, message: string) {
+    return new UnauthorizedException({ code, message });
   }
 }

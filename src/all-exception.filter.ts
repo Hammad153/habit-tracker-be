@@ -10,8 +10,8 @@ import { MyLoggerService } from '../log/my-logger/my-logger.service';
 import { PrismaClientValidationError } from '@prisma/client/runtime/client';
 
 @Catch()
-export class AllExcenptionFilter extends BaseExceptionFilter {
-  private readonly logger = new MyLoggerService(AllExcenptionFilter.name);
+export class AllExceptionFilter extends BaseExceptionFilter {
+  private readonly logger = new MyLoggerService(AllExceptionFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -20,6 +20,7 @@ export class AllExcenptionFilter extends BaseExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal Server Error';
+    let code: string | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -29,6 +30,7 @@ export class AllExcenptionFilter extends BaseExceptionFilter {
         message = res;
       } else if (typeof res === 'object') {
         message = (res as any).message || JSON.stringify(res);
+        code = (res as any).code;
       }
     } else if (exception instanceof PrismaClientValidationError) {
       status = 422;
@@ -39,6 +41,7 @@ export class AllExcenptionFilter extends BaseExceptionFilter {
 
     const responsePayload = {
       statusCode: status,
+      ...(code ? { code } : {}),
       message,
       path: request.url,
       timestamp: new Date().toISOString(),
@@ -49,7 +52,9 @@ export class AllExcenptionFilter extends BaseExceptionFilter {
     // 📜 Log it
     this.logger.error(
       `${status} - ${message} - ${request.method} ${request.url}`,
-      AllExcenptionFilter.name,
+      AllExceptionFilter.name,
     );
   }
 }
+
+export { AllExceptionFilter as AllExcenptionFilter };

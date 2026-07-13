@@ -2,7 +2,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import helmet from 'helmet';
 import * as express from 'express';
-import { AllExcenptionFilter } from './all-exception.filter';
+import { AllExceptionFilter } from './all-exception.filter';
 
 /**
  * Single, shared application configuration used by every entry point
@@ -33,7 +33,7 @@ export function configureApp(app: INestApplication): void {
     credentials: true,
   });
 
-  app.useGlobalFilters(new AllExcenptionFilter(httpAdapter));
+  app.useGlobalFilters(new AllExceptionFilter(httpAdapter));
 
   // Global input validation. `whitelist` strips properties not declared on the
   // DTO (closes mass-assignment / object-injection), `transform` coerces

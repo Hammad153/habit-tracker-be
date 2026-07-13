@@ -6,7 +6,6 @@ import {
   Delete,
   Body,
   Param,
-  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ReminderService } from './reminder.service';
@@ -15,6 +14,7 @@ import {
   UpdateReminderDto,
   RegisterPushTokenDto,
 } from './dto/reminder.dto';
+import { CurrentUser } from '../../core/decorators/current-user.decorator';
 
 @ApiTags('Reminders')
 @Controller('reminder')
@@ -22,32 +22,32 @@ export class ReminderController {
   constructor(private readonly reminderSvc: ReminderService) {}
 
   @Get()
-  findAll(@Query('userId') userId: string) {
+  findAll(@CurrentUser() userId: string) {
     return this.reminderSvc.findAll(userId);
   }
 
   @Get('habit/:habitId')
-  findByHabit(@Param('habitId') habitId: string) {
-    return this.reminderSvc.findByHabit(habitId);
+  findByHabit(@CurrentUser() userId: string, @Param('habitId') habitId: string) {
+    return this.reminderSvc.findByHabit(userId, habitId);
   }
 
   @Post()
-  create(@Body() data: CreateReminderDto) {
-    return this.reminderSvc.create(data);
+  create(@CurrentUser() userId: string, @Body() data: CreateReminderDto) {
+    return this.reminderSvc.create(userId, data);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() data: UpdateReminderDto) {
-    return this.reminderSvc.update(id, data);
+  update(@CurrentUser() userId: string, @Param('id') id: string, @Body() data: UpdateReminderDto) {
+    return this.reminderSvc.update(userId, id, data);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.reminderSvc.delete(id);
+  delete(@CurrentUser() userId: string, @Param('id') id: string) {
+    return this.reminderSvc.delete(userId, id);
   }
 
   @Post('push-token')
-  registerPushToken(@Body() { userId, pushToken }: RegisterPushTokenDto) {
+  registerPushToken(@CurrentUser() userId: string, @Body() { pushToken }: RegisterPushTokenDto) {
     return this.reminderSvc.registerPushToken(userId, pushToken);
   }
 

@@ -15,13 +15,19 @@ export class ReminderService {
     });
   }
 
-  public async findByHabit(habitId: string): Promise<Reminder | null> {
-    return this.databaseSvc.reminder.findUnique({
-      where: { habitId },
+  public async findByHabit(userId: string, habitId: string): Promise<Reminder | null> {
+    return this.databaseSvc.reminder.findFirst({
+      where: { habitId, userId },
     });
   }
 
-  public async create(data: CreateReminderDto): Promise<Reminder> {
+  public async create(userId: string, data: CreateReminderDto): Promise<Reminder> {
+    const habit = await this.databaseSvc.habit.findFirst({
+      where: { id: data.habitId, userId },
+    });
+    if (!habit)
+      throw new NotFoundException(`Habit with ID ${data.habitId} not found`);
+
     return this.databaseSvc.reminder.upsert({
       where: { habitId: data.habitId },
       update: {
@@ -30,7 +36,7 @@ export class ReminderService {
         enabled: data.enabled ?? true,
       },
       create: {
-        userId: data.userId,
+        userId,
         habitId: data.habitId,
         time: data.time,
         days: data.days,
@@ -39,11 +45,11 @@ export class ReminderService {
     });
   }
 
-  public async update(id: string, data: UpdateReminderDto): Promise<Reminder> {
+  public async update(userId: string, id: string, data: UpdateReminderDto): Promise<Reminder> {
     const reminder = await this.databaseSvc.reminder.findUnique({
       where: { id },
     });
-    if (!reminder)
+    if (!reminder || reminder.userId !== userId)
       throw new NotFoundException(`Reminder with ID ${id} not found`);
 
     return this.databaseSvc.reminder.update({
@@ -52,7 +58,13 @@ export class ReminderService {
     });
   }
 
-  public async delete(id: string): Promise<Reminder> {
+  public async delete(userId: string, id: string): Promise<Reminder> {
+    const reminder = await this.databaseSvc.reminder.findUnique({
+      where: { id },
+    });
+    if (!reminder || reminder.userId !== userId)
+      throw new NotFoundException(`Reminder with ID ${id} not found`);
+
     return this.databaseSvc.reminder.delete({
       where: { id },
     });

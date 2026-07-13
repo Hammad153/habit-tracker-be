@@ -14,7 +14,7 @@ export const calculateStreaks = (completionDates: string[]): StreakData => {
 
   let longestStreak = 0;
   let currentStreak = 0;
-  let runningStreak = 0;
+  const runningStreak = 0;
 
   const todayStr = new Date().toISOString().split('T')[0];
   const yesterdayStr = new Date(Date.now() - 86400000)
