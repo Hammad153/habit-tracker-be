@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { UsersModule } from '../users/users.module';
+import { MailerModule } from '../mailer/mailer.module';
 import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { ConfigModule } from '@nestjs/config';
@@ -12,6 +13,7 @@ import { DatabaseService } from '../../core/database/database.service';
 @Module({
   imports: [
     UsersModule,
+    MailerModule,
     ConfigModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

@@ -16,6 +16,7 @@ import { ApiProfileDocs, ApiLoginDocs, ApiSignUpDocs } from './auth.swagger';
 import { Public } from '../../core/decorators/public.decorator';
 import { LoginDto } from './dto/login.dto';
 import { SignUpDto } from './dto/signup.dto';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/forgot-password.dto';
 
 @ApiTags('Auth')
 @ApiBearerAuth()
@@ -56,5 +57,19 @@ export class AuthController {
   @Post('refresh')
   async refresh(@Body('refresh_token') token: string) {
     return this.authService.refreshToken(token);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.newPassword);
   }
 }

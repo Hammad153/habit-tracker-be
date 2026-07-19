@@ -35,8 +35,17 @@ describe('AuthService refresh lifecycle', () => {
     refreshTokenMatch: jest.fn(),
   };
 
+  const mailerSvc = {
+    sendEmail: jest.fn(),
+  };
+
   const service = () =>
-    new AuthService(configSvc as any, jwtSvc as any, userSvc as any);
+    new AuthService(
+      configSvc as any,
+      jwtSvc as any,
+      userSvc as any,
+      mailerSvc as any,
+    );
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -70,14 +79,14 @@ describe('AuthService refresh lifecycle', () => {
   it('returns a stable terminal code for expired refresh tokens', async () => {
     jwtSvc.verifyAsync.mockRejectedValue({ name: 'TokenExpiredError' });
 
-    await expect(service().refreshToken('expired-refresh')).rejects.toMatchObject(
-      {
-        response: expect.objectContaining({
-          code: 'REFRESH_TOKEN_EXPIRED',
-          message: 'Your session has expired. Please sign in again.',
-        }),
-      },
-    );
+    await expect(
+      service().refreshToken('expired-refresh'),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'REFRESH_TOKEN_EXPIRED',
+        message: 'Your session has expired. Please sign in again.',
+      }),
+    });
   });
 
   it('rejects access tokens submitted to the refresh endpoint', async () => {

@@ -86,4 +86,65 @@ export class UsersService {
     if (!user || !user.refreshToken) return false;
     return await bcrypt.compare(providedToken, user.refreshToken);
   }
+
+  /**
+   * Stores a hashed password-reset token and its expiry on the user record.
+   * The token passed in should already be hashed (e.g. via bcrypt).
+   */
+  public async updateResetToken(
+    userId: string,
+    hashedToken: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    await this.databaseSvc.user.update({
+      where: { id: userId },
+      data: {
+        resetToken: hashedToken,
+        resetTokenExpiry: expiresAt,
+      },
+    });
+  }
+
+  /**
+   * Finds a user whose reset token matches the provided raw token.
+   * Returns null if no user has a matching (hashed) token that hasn't expired.
+   */
+  public async findByResetToken(rawToken: string): Promise<User | null> {
+    // Fetch all users that have a reset token set and haven't expired
+    const candidates = await this.databaseSvc.user.findMany({
+      where: {
+        resetToken: { not: null },
+        resetTokenExpiry: { gt: new Date() },
+      },
+    });
+
+    // Compare the raw token against each hashed token
+    for (const user of candidates) {
+      if (
+        user.resetToken &&
+        (await bcrypt.compare(rawToken, user.resetToken))
+      ) {
+        return user;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Updates a user's password and clears the reset token fields.
+   */
+  public async resetPassword(
+    userId: string,
+    hashedPassword: string,
+  ): Promise<void> {
+    await this.databaseSvc.user.update({
+      where: { id: userId },
+      data: {
+        password: hashedPassword,
+        resetToken: null,
+        resetTokenExpiry: null,
+      },
+    });
+  }
 }
