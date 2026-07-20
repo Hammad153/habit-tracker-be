@@ -107,23 +107,16 @@ export class AuthService {
       };
     }
 
-    // Generate a secure reset token
     const resetToken = crypto.randomBytes(32).toString('hex');
-
-    // Hash the token before storing it (for security)
-    const hashedToken = await bcrypt.hash(resetToken, 10);
-
-    // Set token expiry to 1 hour from now
+    const tokenDigest = this.hashResetToken(resetToken);
     const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
 
-    // Store the hashed token and expiry in the database
-    await this.userSvc.updateResetToken(user.id, hashedToken, resetTokenExpiry);
+    await this.userSvc.updateResetToken(user.id, tokenDigest, resetTokenExpiry);
 
-    // Build the reset URL
-    // In production, this would be your frontend app's reset password page
-    // For now, we'll include the token in the email
     const appName = this.configSvc.get<string>('APP_NAME') || 'Habit Tracker';
-    const resetUrl = `habittracker://reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+    const appScheme =
+      this.configSvc.get<string>('APP_DEEP_LINK_SCHEME') || 'habittracker';
+    const resetUrl = `${appScheme}://reset-password?token=${resetToken}`;
 
     // Send the password reset email
     try {
@@ -158,24 +151,16 @@ export class AuthService {
   }
 
   async resetPassword(token: string, newPassword: string) {
-    // Find user with a valid reset token that hasn't expired
-    const user = await this.userSvc.findByResetToken(token);
+    const user = await this.userSvc.findByResetTokenDigest(
+      this.hashResetToken(token),
+    );
 
     if (!user) {
       throw new UnauthorizedException('Invalid or expired reset token');
     }
 
-    // Check if the token has expired
-    if (user.resetTokenExpiry && new Date() > user.resetTokenExpiry) {
-      throw new UnauthorizedException(
-        'Reset token has expired. Please request a new one.',
-      );
-    }
-
-    // Hash the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update the user's password and clear the reset token
     await this.userSvc.resetPassword(user.id, hashedPassword);
 
     return {
@@ -292,6 +277,7 @@ If you didn't request a password reset, please ignore this email or contact supp
     const safe = { ...user } as Partial<User>;
     delete safe.password;
     delete safe.refreshToken;
+    delete safe.resetToken;
     return safe;
   }
 
@@ -301,5 +287,9 @@ If you didn't request a password reset, please ignore this email or contact supp
 
   private authError(code: string, message: string) {
     return new UnauthorizedException({ code, message });
+  }
+
+  private hashResetToken(token: string) {
+    return crypto.createHash('sha256').update(token).digest('hex');
   }
 }

@@ -88,47 +88,35 @@ export class UsersService {
   }
 
   /**
-   * Stores a hashed password-reset token and its expiry on the user record.
-   * The token passed in should already be hashed (e.g. via bcrypt).
+   * Stores a password-reset token digest and its expiry on the user record.
+   * The raw token is only sent to the user's email and is never persisted.
    */
   public async updateResetToken(
     userId: string,
-    hashedToken: string,
+    tokenDigest: string,
     expiresAt: Date,
   ): Promise<void> {
     await this.databaseSvc.user.update({
       where: { id: userId },
       data: {
-        resetToken: hashedToken,
+        resetToken: tokenDigest,
         resetTokenExpiry: expiresAt,
       },
     });
   }
 
   /**
-   * Finds a user whose reset token matches the provided raw token.
-   * Returns null if no user has a matching (hashed) token that hasn't expired.
+   * Finds a user whose reset-token digest is still valid.
    */
-  public async findByResetToken(rawToken: string): Promise<User | null> {
-    // Fetch all users that have a reset token set and haven't expired
-    const candidates = await this.databaseSvc.user.findMany({
+  public async findByResetTokenDigest(
+    tokenDigest: string,
+  ): Promise<User | null> {
+    return this.databaseSvc.user.findFirst({
       where: {
-        resetToken: { not: null },
+        resetToken: tokenDigest,
         resetTokenExpiry: { gt: new Date() },
       },
     });
-
-    // Compare the raw token against each hashed token
-    for (const user of candidates) {
-      if (
-        user.resetToken &&
-        (await bcrypt.compare(rawToken, user.resetToken))
-      ) {
-        return user;
-      }
-    }
-
-    return null;
   }
 
   /**
@@ -142,6 +130,7 @@ export class UsersService {
       where: { id: userId },
       data: {
         password: hashedPassword,
+        refreshToken: null,
         resetToken: null,
         resetTokenExpiry: null,
       },
