@@ -33,7 +33,11 @@ const makeService = () => {
     habit: { findFirst: jest.fn(), findUniqueOrThrow: jest.fn() },
   };
 
-  const database = { $transaction: jest.fn((fn: any) => fn(tx)), tx };
+  const database = {
+    ...tx,
+    $transaction: jest.fn((fn: any) => fn(tx)),
+    tx,
+  };
 
   const profileSvc = { addExperience: jest.fn(), addExperienceTx: jest.fn() };
   const awardsSvc = { checkAndAwardBadges: jest.fn() };
