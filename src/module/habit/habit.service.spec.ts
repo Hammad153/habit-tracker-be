@@ -428,6 +428,21 @@ describe('HabitService stacking validation', () => {
     expect(s.database.habit.findFirst).not.toHaveBeenCalled();
   });
 
+  it('rejects stacking a habit after an archived habit', async () => {
+    const s = makeService();
+    s.database.habit.findUnique.mockResolvedValue(habit({ id: 'a' }));
+    s.database.habit.findFirst.mockResolvedValue({
+      id: 'archived-target',
+      isArchived: true,
+    });
+
+    await expect(
+      s.service.updateHabit('a', 'user-1', {
+        stackAfterHabitId: 'archived-target',
+      }),
+    ).rejects.toThrow(ConflictException);
+  });
+
   it('rejects an indirect cycle when re-pointing a habit via update', async () => {
     const s = makeService();
     // Existing chain: b follows a, c follows b. Making "a" follow "c"
