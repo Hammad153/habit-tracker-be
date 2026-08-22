@@ -21,12 +21,16 @@ import {
 } from './habit.swagger';
 import { ToggleCompletionDto } from './dto/toggle-completion.dto';
 import { CurrentUser } from '../../core/decorators/current-user.decorator';
+import { StreakFreezeService } from '../rewards/streak-freeze.service';
 
 @ApiTags('Habits')
 @ApiBearerAuth()
 @Controller('habit')
 export class HabitController {
-  constructor(private readonly habitSvc: HabitService) {}
+  constructor(
+    private readonly habitSvc: HabitService,
+    private readonly freezeSvc: StreakFreezeService,
+  ) {}
 
   @Get()
   @FindAllHabitsDocs()

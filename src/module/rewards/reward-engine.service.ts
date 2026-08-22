@@ -6,7 +6,7 @@ import {
   RewardLedger,
   RewardTransactionType,
 } from '@prisma/client';
-import { COINS_PER_COMPLETION, MAX_IDENTITY_LEVEL } from '../../core/utils/evidence.constants';
+import { COINS_PER_COMPLETION, MAX_IDENTITY_LEVEL, STREAK_MILESTONE_BONUSES, DEFAULT_STREAK_MILESTONE_BONUS } from '../../core/utils/evidence.constants';
 import { IDENTITY_LEVEL_THRESHOLDS } from '../../core/utils/evidence.utils';
 import {
   computeCurrentStreak,
@@ -16,6 +16,7 @@ import {
 type Tx = Prisma.TransactionClient;
 
 export const STREAK_MILESTONES = [3, 7, 14, 30, 60, 100] as const;
+// Legacy constant kept for backward compatibility – use STREAK_MILESTONE_BONUSES instead
 export const STREAK_MILESTONE_BONUS = 25;
 export const IDENTITY_MILESTONE_BONUS = 20;
 
@@ -268,9 +269,10 @@ export class RewardEngineService {
       if (streak < m) break;
       const key = streakMilestoneKey(ctx.habitId, m, cycleStart);
       if (claimedSet.has(key)) continue;
+      const bonus = STREAK_MILESTONE_BONUSES[m] ?? DEFAULT_STREAK_MILESTONE_BONUS;
       try {
         await this.createAward(tx, ctx.userId, {
-          amount: STREAK_MILESTONE_BONUS,
+          amount: bonus,
           type: 'STREAK_MILESTONE',
           referenceType: 'STREAK_MILESTONE',
           referenceId: `${ctx.habitId}:${m}`,
