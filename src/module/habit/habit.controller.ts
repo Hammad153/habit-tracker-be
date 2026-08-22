@@ -22,6 +22,7 @@ import {
 import { ToggleCompletionDto } from './dto/toggle-completion.dto';
 import { CurrentUser } from '../../core/decorators/current-user.decorator';
 import { StreakFreezeService } from '../rewards/streak-freeze.service';
+import { FreezeDto } from './dto/freeze.dto';
 
 @ApiTags('Habits')
 @ApiBearerAuth()
@@ -74,6 +75,11 @@ export class HabitController {
     @CurrentUser() userId: string,
   ) {
     return this.habitSvc.toggleCompletion(id, userId, date, value, kind);
+  }
+
+  @Post(':id/freeze')
+  async freeze(@Param('id') id: string, @Body() body: FreezeDto, @CurrentUser() userId: string) {
+    return this.freezeSvc.purchaseFreeze(userId, id, body.date);
   }
 
   @Post('cleanup')
