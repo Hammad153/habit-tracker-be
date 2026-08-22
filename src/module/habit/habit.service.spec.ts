@@ -34,6 +34,7 @@ const makeService = () => {
     },
     habit: {
       create: jest.fn(({ data }) => Promise.resolve({ id: 'habit-new', ...data })),
+      findFirst: jest.fn(),
     },
     identityHabit: { createMany: jest.fn(), deleteMany: jest.fn() },
     identity: { findMany: jest.fn().mockResolvedValue([]) },
@@ -431,6 +432,8 @@ describe('HabitService stacking validation', () => {
   it('rejects stacking a habit after an archived habit', async () => {
     const s = makeService();
     s.database.habit.findUnique.mockResolvedValue(habit({ id: 'a' }));
+    // updateHabit validates inside its transaction, so the tx client is used.
+    s.database.$transaction.mockImplementation((fn: any) => fn(s.database));
     s.database.habit.findFirst.mockResolvedValue({
       id: 'archived-target',
       isArchived: true,
