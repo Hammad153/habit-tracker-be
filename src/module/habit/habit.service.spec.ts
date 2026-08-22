@@ -6,7 +6,7 @@ import { Prisma } from '@prisma/client';
 import { HabitService } from './habit.service';
 import { ProfileService } from '../profile/profile.service';
 import { AwardsService } from '../awards/awards.service';
-import { RewardsService } from '../rewards/rewards.service';
+import { RewardEngineService } from '../rewards/reward-engine.service';
 import { DomainEventService } from '../../core/events/domain-event.service';
 
 const habit = (patch: Partial<any> = {}) => ({
@@ -39,6 +39,11 @@ const makeService = () => {
     identityHabit: { createMany: jest.fn(), deleteMany: jest.fn() },
     identity: { findMany: jest.fn().mockResolvedValue([]) },
     user: { update: jest.fn() },
+    temptationBundle: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    habitRewardAllocation: {
+      create: jest.fn().mockResolvedValue({}),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 
   const database = {
@@ -64,9 +69,9 @@ const makeService = () => {
     addExperienceTx: jest.fn().mockResolvedValue({}),
   };
   const awardsSvc = { checkAndAwardBadges: jest.fn().mockResolvedValue([]) };
-  const rewardsSvc = {
-    awardForCompletion: jest.fn().mockResolvedValue(10),
-    reverseCompletionAward: jest.fn().mockResolvedValue(10),
+  const rewardEngine = {
+    awardForCompletionTx: jest.fn().mockResolvedValue(breakdownOf(10)),
+    reverseCompletionRewardsTx: jest.fn().mockResolvedValue(10),
   };
   const domainEvents = { emit: jest.fn() };
 
@@ -74,7 +79,7 @@ const makeService = () => {
     database as any,
     profileSvc as unknown as ProfileService,
     awardsSvc as unknown as AwardsService,
-    rewardsSvc as unknown as RewardsService,
+    rewardEngine as unknown as RewardEngineService,
     domainEvents as unknown as DomainEventService,
   );
 
@@ -84,10 +89,20 @@ const makeService = () => {
     tx,
     profileSvc,
     awardsSvc,
-    rewardsSvc,
+    rewardEngine,
     domainEvents,
   };
 };
+
+function breakdownOf(total: number): any {
+  return {
+    total,
+    lines: [],
+    streak: total >= 10 ? 1 : 0,
+    newStreakMilestones: [],
+    newIdentityMilestones: [],
+  };
+}
 
 describe('HabitService.toggleCompletion', () => {
   it('creates a FULL completion and grants XP + coins once', async () => {
@@ -109,7 +124,7 @@ describe('HabitService.toggleCompletion', () => {
       'user-1',
       10,
     );
-    expect(s.rewardsSvc.awardForCompletion).toHaveBeenCalledTimes(1);
+    expect(s.rewardEngine.awardForCompletionTx).toHaveBeenCalledTimes(1);
     expect(s.domainEvents.emit).toHaveBeenCalledWith('habit.completed', {
       userId: 'user-1',
       habitId: 'habit-1',
@@ -125,7 +140,7 @@ describe('HabitService.toggleCompletion', () => {
       habit({ minimumBehavior: 'Read one page' }),
     );
     s.database.completion.findUnique.mockResolvedValue(null);
-    s.rewardsSvc.awardForCompletion.mockResolvedValue(3);
+    s.rewardEngine.awardForCompletionTx.mockResolvedValue(breakdownOf(3));
 
     const result = await s.service.toggleCompletion(
       'habit-1',
@@ -139,7 +154,7 @@ describe('HabitService.toggleCompletion', () => {
     expect(s.tx.completion.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ kind: 'MINIMUM' }),
     });
-    expect(s.rewardsSvc.awardForCompletion).toHaveBeenCalledWith(
+    expect(s.rewardEngine.awardForCompletionTx).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ kind: 'MINIMUM' }),
     );
@@ -179,7 +194,7 @@ describe('HabitService.toggleCompletion', () => {
     };
     s.database.habit.findUnique.mockResolvedValue(habit());
     s.database.completion.findUnique.mockResolvedValue(existing);
-    s.rewardsSvc.reverseCompletionAward.mockResolvedValue(10);
+    s.rewardEngine.reverseCompletionRewardsTx.mockResolvedValue(10);
 
     const result = await s.service.toggleCompletion(
       'habit-1',
@@ -196,9 +211,9 @@ describe('HabitService.toggleCompletion', () => {
       'user-1',
       -10,
     );
-    expect(s.rewardsSvc.reverseCompletionAward).toHaveBeenCalledWith(
+    expect(s.rewardEngine.reverseCompletionRewardsTx).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ completionId: 'c-1', kind: 'FULL' }),
+      expect.objectContaining({ completionId: 'c-1', priorKind: 'FULL' }),
     );
     expect(s.domainEvents.emit).toHaveBeenCalledWith(
       'habit.uncompleted',
@@ -235,7 +250,7 @@ describe('HabitService.toggleCompletion', () => {
     );
 
     expect(s.profileSvc.addExperienceTx).not.toHaveBeenCalled();
-    expect(s.rewardsSvc.awardForCompletion).not.toHaveBeenCalled();
+    expect(s.rewardEngine.awardForCompletionTx).not.toHaveBeenCalled();
     expect(result.rewards?.coinsAwarded).toBe(0);
   });
 
@@ -263,7 +278,7 @@ describe('HabitService.toggleCompletion', () => {
     );
 
     expect(result.status).toBe(true);
-    expect(s.rewardsSvc.awardForCompletion).toHaveBeenCalledTimes(1);
+    expect(s.rewardEngine.awardForCompletionTx).toHaveBeenCalledTimes(1);
     expect(s.profileSvc.addExperienceTx).toHaveBeenCalledTimes(1);
   });
 
@@ -284,7 +299,7 @@ describe('HabitService.toggleCompletion', () => {
     s.tx.completion.update.mockImplementation(({ data }) =>
       Promise.resolve({ ...existing, ...data }),
     );
-    s.rewardsSvc.awardForCompletion.mockResolvedValue(3);
+    s.rewardEngine.awardForCompletionTx.mockResolvedValue(breakdownOf(3));
 
     const result = await s.service.toggleCompletion(
       'habit-1',
@@ -295,8 +310,8 @@ describe('HabitService.toggleCompletion', () => {
     );
 
     expect(result.rewards?.coinsAwarded).toBe(-7); // -10 reversed + 3 granted
-    expect(s.rewardsSvc.reverseCompletionAward).toHaveBeenCalledTimes(1);
-    expect(s.rewardsSvc.awardForCompletion).toHaveBeenCalledTimes(1);
+    expect(s.rewardEngine.reverseCompletionRewardsTx).toHaveBeenCalledTimes(1);
+    expect(s.rewardEngine.awardForCompletionTx).toHaveBeenCalledTimes(1);
     // XP must not be double-granted for the same day.
     expect(s.profileSvc.addExperienceTx).not.toHaveBeenCalled();
   });
@@ -339,7 +354,7 @@ describe('HabitService.toggleCompletion', () => {
     await s.service.toggleCompletion('habit-1', 'user-1', '2026-08-22', 5);
 
     expect(s.profileSvc.addExperienceTx).not.toHaveBeenCalled();
-    expect(s.rewardsSvc.awardForCompletion).not.toHaveBeenCalled();
+    expect(s.rewardEngine.awardForCompletionTx).not.toHaveBeenCalled();
   });
 
   it('conserves coins across a same-day FULL -> MINIMUM -> FULL round trip', async () => {
@@ -358,8 +373,8 @@ describe('HabitService.toggleCompletion', () => {
       s.tx.completion.update.mockImplementation(({ data }) =>
         Promise.resolve({ ...existing, ...data }),
       );
-      s.rewardsSvc.awardForCompletion.mockResolvedValue(award);
-      s.rewardsSvc.reverseCompletionAward.mockResolvedValue(reverse);
+      s.rewardEngine.awardForCompletionTx.mockResolvedValue(breakdownOf(award));
+      s.rewardEngine.reverseCompletionRewardsTx.mockResolvedValue(reverse);
       const result = await s.service.toggleCompletion(
         'habit-1',
         'user-1',

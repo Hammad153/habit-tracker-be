@@ -56,10 +56,29 @@ enum RewardTransactionType {
   HABIT_MINIMUM_COMPLETION
   HABIT_EMERGENCY_COMPLETION
   STREAK_MILESTONE
+  IDENTITY_MILESTONE
   STREAK_FREEZE
   REWARD_REDEMPTION
   ADJUSTMENT
   REVERSAL
+}
+
+enum TemptationBundleStatus {
+  LOCKED
+  UNLOCKED
+  USED
+}
+
+enum RewardItemType {
+  THEME
+  AVATAR
+  JOURNAL_THEME
+  CELEBRATION
+}
+
+enum RewardItemStatus {
+  ACTIVE
+  INACTIVE
 }
 
 model User {
@@ -92,6 +111,10 @@ model User {
   journalEntries JournalEntry[]
   identities     Identity[]
   rewardLedger   RewardLedger[]
+  temptationBundles TemptationBundle[]
+  streakFreezes  StreakFreeze[]
+  rewardAllocations HabitRewardAllocation[]
+  rewardRedemptions RewardRedemption[]
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 }
@@ -157,6 +180,15 @@ model Habit {
   stackAfterHabitId String?
   stackAfter       Habit?  @relation("HabitStack", fields: [stackAfterHabitId], references: [id], onDelete: SetNull)
   stackedBy        Habit[] @relation("HabitStack")
+  // Per-habit reward rule overrides. Null = engine default for that kind.
+  fullCoins        Int?
+  minimumCoins     Int?
+  emergencyCoins   Int?
+  streakBonusEnabled   Boolean @default(true)
+  identityBonusEnabled Boolean @default(true)
+  // Virtual Reward Fund: naira allocated to the user's reward fund on every
+  // FULL completion. Null disables funding for this habit. Never real money.
+  rewardFundAmount Float?
   isArchived  Boolean      @default(false)
   startDate   DateTime?    // Optional start date for temporary habits
   endDate     DateTime?    // Optional end date - habit will be auto-deleted after this date
@@ -166,6 +198,9 @@ model Habit {
   reminders   Reminder[]
   dailyPlanTasks DailyPlanTask[]
   identityLinks IdentityHabit[]
+  temptationBundles TemptationBundle[]
+  streakFreezes StreakFreeze[]
+  rewardAllocations HabitRewardAllocation[]
 }
 
 model Budget {
@@ -382,6 +417,11 @@ model RewardLedger {
   type          RewardTransactionType
   referenceType String?               // e.g. "COMPLETION", "LEDGER_ENTRY"
   referenceId   String?
+  // Deterministic dedupe key for milestone-style awards (e.g.
+  // "sm:<habitId>:<milestone>:<cycleStart>", "im:<identityId>:<threshold>").
+  // A repeated claim hits the unique index and is a no-op, which keeps
+  // bonuses idempotent without blocking legitimate repeat awards.
+  idempotencyKey String?
   // Set when this entry reverses another ledger entry. Unique: an entry can
   // only be reversed once, which makes reversals idempotent.
   reversalOfId  String?
@@ -396,8 +436,83 @@ model RewardLedger {
   // instead comes from the single completion row (habitId+date) and the
   // transition state machine that runs inside its transaction.
   @@unique([reversalOfId])
+  @@unique([idempotencyKey])
   @@index([referenceType, referenceId])
   @@index([userId, createdAt])
+}
+
+model TemptationBundle {
+  id          String                @id @default(cuid())
+  userId      String
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habitId     String
+  habit       Habit                 @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      TemptationBundleStatus @default(LOCKED)
+  unlockedAt  DateTime?
+  usedAt      DateTime?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([userId, status])
+  @@index([habitId])
+}
+
+model StreakFreeze {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habitId   String
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date      String   // Protected occurrence day key (YYYY-MM-DD)
+  cost      Int
+  createdAt DateTime @default(now())
+
+  // One freeze per habit per day: a duplicate purchase request hits this
+  // unique index and is treated as "already protected", never double-charged.
+  @@unique([habitId, date])
+  @@index([userId, date])
+}
+
+model HabitRewardAllocation {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habitId      String
+  habit        Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  completionId String   @unique
+  amount       Float
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model RewardItem {
+  id          String          @id @default(cuid())
+  key         String          @unique
+  name        String
+  description String?
+  cost        Int
+  type        RewardItemType
+  status      RewardItemStatus @default(ACTIVE)
+  redemptions RewardRedemption[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model RewardRedemption {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      RewardItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  cost      Int        // Snapshot of the item cost at redemption time
+  createdAt DateTime   @default(now())
+
+  // Items are permanent unlocks: one redemption per user per item.
+  @@unique([userId, itemId])
+  @@index([userId])
 }
 
 model Badge {

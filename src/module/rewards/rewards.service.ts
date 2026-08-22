@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CompletionKind, Prisma, RewardTransactionType } from '@prisma/client';
+import type { RewardLedger } from '@prisma/client';
 import { DatabaseService } from '../../core/database/database.service';
 import { COINS_PER_COMPLETION } from '../../core/utils/evidence.constants';
 
@@ -133,7 +134,7 @@ export class RewardsService {
   private async findReversibleAward(
     tx: Tx,
     input: CompletionAwardInput,
-  ): Promise<Prisma.RewardLedgerGetPayload<object> | null> {
+  ): Promise<RewardLedger | null> {
     return tx.rewardLedger.findFirst({
       where: {
         userId: input.userId,

@@ -8,7 +8,10 @@ import { CompletionKind, Completion, Prisma, Habit } from '@prisma/client';
 import { DatabaseService } from '../../core/database/database.service';
 import { ProfileService } from '../profile/profile.service';
 import { AwardsService } from '../awards/awards.service';
-import { RewardsService } from '../rewards/rewards.service';
+import {
+  RewardEngineService,
+  RewardBreakdown,
+} from '../rewards/reward-engine.service';
 import { DomainEventService } from '../../core/events/domain-event.service';
 import { XP_PER_COMPLETION } from '../../core/utils/progression.utils';
 import { EVIDENCE_POINTS } from '../../core/utils/evidence.utils';
@@ -24,6 +27,10 @@ export interface CompletionResult extends Completion {
   rewards?: {
     coinsAwarded: number;
     kind: CompletionKind;
+    breakdown?: RewardBreakdown['lines'];
+    streak?: number;
+    newStreakMilestones?: number[];
+    newIdentityMilestones?: RewardBreakdown['newIdentityMilestones'];
   };
   identityEvidence?: {
     identities: Array<{ id: string; title: string; evidencePoints: number }>;
@@ -36,7 +43,7 @@ export class HabitService {
     private databaseSvc: DatabaseService,
     private profileSvc: ProfileService,
     private awardsSvc: AwardsService,
-    private rewardsSvc: RewardsService,
+    private rewardEngine: RewardEngineService,
     private domainEvents: DomainEventService,
   ) {}
 
@@ -432,18 +439,26 @@ export class HabitService {
       // ---- Removal path (legacy toggle off) ----
       if (existing && value === undefined && kindInput === undefined) {
         await tx.completion.delete({ where: { id: existing.id } });
+        let coinsDelta = 0;
         let reversedKind: CompletionKind | undefined;
         if (priorAward) {
           await this.profileSvc.addExperienceTx(tx, userId, -XP_PER_COMPLETION);
-          const reversed = await this.rewardsSvc.reverseCompletionAward(tx, {
-            userId,
-            completionId: priorAward.id,
-            kind: priorAward.kind,
-            habitTitle: habit.title,
-          });
+          const reversed = await this.rewardEngine.reverseCompletionRewardsTx(
+            tx,
+            {
+              userId,
+              habitId,
+              completionId: priorAward.id,
+              priorKind: priorAward.kind,
+            },
+          );
           coinsDelta -= reversed;
           reversedKind = priorAward.kind;
         }
+        // The virtual reward fund allocation dies with the completion.
+        await tx.habitRewardAllocation.deleteMany({
+          where: { habitId, completionId: existing.id },
+        });
         return {
           ...existing,
           status: false,
@@ -506,44 +521,93 @@ export class HabitService {
       }
 
       // ---- Award transitions (only on actual state changes) ----
+      let breakdown: RewardBreakdown | undefined;
       if (!isCompleted) {
         if (priorAward) {
           // Downgrade from completed back to partial progress.
           await this.profileSvc.addExperienceTx(tx, userId, -XP_PER_COMPLETION);
-          coinsDelta -= await this.rewardsSvc.reverseCompletionAward(tx, {
+          coinsDelta -= await this.rewardEngine.reverseCompletionRewardsTx(tx, {
             userId,
+            habitId,
             completionId: priorAward.id,
-            kind: priorAward.kind,
-            habitTitle: habit.title,
+            priorKind: priorAward.kind,
           });
         }
       } else {
         if (priorAward && kindChanged) {
           // Same-day re-log with a different version: swap the coin grant so
-          // totals reflect the latest truth. XP for the day is kept.
-          coinsDelta -= await this.rewardsSvc.reverseCompletionAward(tx, {
+          // totals reflect the latest truth. XP for the day is kept. Streak
+          // cycles stay intact, so only the base grant swaps.
+          coinsDelta -= await this.rewardEngine.reverseCompletionRewardsTx(tx, {
             userId,
+            habitId,
             completionId: priorAward.id,
-            kind: priorAward.kind,
-            habitTitle: habit.title,
+            priorKind: priorAward.kind,
           });
         }
         if (transitionToCompleted) {
           await this.profileSvc.addExperienceTx(tx, userId, XP_PER_COMPLETION);
         }
         if (transitionToCompleted || kindChanged) {
-          coinsDelta += await this.rewardsSvc.awardForCompletion(tx, {
+          breakdown = await this.rewardEngine.awardForCompletionTx(tx, {
             userId,
+            habitId,
             completionId: completion.id,
             kind,
+            date,
             habitTitle: habit.title,
+            rules: {
+              fullCoins: habit.fullCoins,
+              minimumCoins: habit.minimumCoins,
+              emergencyCoins: habit.emergencyCoins,
+              streakBonusEnabled: habit.streakBonusEnabled,
+              identityBonusEnabled: habit.identityBonusEnabled,
+            },
           });
+          coinsDelta += breakdown.total;
+
+          if (transitionToCompleted) {
+            // MAKE IT ATTRACTIVE: unlock temptation bundles on first win.
+            await tx.temptationBundle.updateMany({
+              where: { habitId, status: 'LOCKED' },
+              data: { status: 'UNLOCKED', unlockedAt: new Date() },
+            });
+            // Virtual Reward Fund: naira allocation on FULL completions only.
+            if (kind === 'FULL' && habit.rewardFundAmount) {
+              try {
+                await tx.habitRewardAllocation.create({
+                  data: {
+                    userId,
+                    habitId,
+                    completionId: completion.id,
+                    amount: habit.rewardFundAmount,
+                  },
+                });
+              } catch (err) {
+                if (
+                  (err as Prisma.PrismaClientKnownRequestError)?.code !== 'P2002'
+                ) {
+                  throw err;
+                }
+              }
+            }
+          }
         }
       }
 
+      const rewards: CompletionResult['rewards'] = {
+        coinsAwarded: coinsDelta,
+        kind,
+      };
+      if (breakdown) {
+        rewards.breakdown = breakdown.lines;
+        rewards.streak = breakdown.streak;
+        rewards.newStreakMilestones = breakdown.newStreakMilestones;
+        rewards.newIdentityMilestones = breakdown.newIdentityMilestones;
+      }
       return {
         ...completion,
-        rewards: { coinsAwarded: coinsDelta, kind },
+        rewards,
       };
     });
 
@@ -566,6 +630,25 @@ export class HabitService {
         date,
         kind: result.kind,
       });
+      // Milestone notifications are optional side effects: safe on events.
+      for (const milestone of result.rewards?.newStreakMilestones ?? []) {
+        this.domainEvents.emit('habit.streakMilestoneReached', {
+          userId,
+          habitId,
+          streak: result.rewards?.streak ?? 0,
+          milestone,
+          date,
+        });
+      }
+      for (const identityMilestone of result.rewards?.newIdentityMilestones ??
+        []) {
+        this.domainEvents.emit('identity.milestoneReached', {
+          userId,
+          identityId: identityMilestone.identityId,
+          threshold: identityMilestone.threshold,
+          date,
+        });
+      }
     } else if (existing?.status) {
       this.domainEvents.emit('habit.uncompleted', {
         userId,

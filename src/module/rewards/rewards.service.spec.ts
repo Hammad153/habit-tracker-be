@@ -6,7 +6,7 @@ const p2002 = (): any => {
   return err;
 };
 
-const makeService = () => {
+const makeService = (): { service: RewardsService; database: any } => {
   const database = {
     rewardLedger: {
       aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 35 } }),
@@ -22,10 +22,14 @@ const makeService = () => {
   return { service: new RewardsService(database), database };
 };
 
-const makeTx = () => {
+const makeTx = (): any => {
+  let entriesCreated = 0;
   const tx = {
     rewardLedger: {
-      create: jest.fn(({ data }) => Promise.resolve({ id: `entry-${tx.rewardLedger.create.mock.calls.length}`, ...data })),
+      create: jest.fn(({ data }) => {
+        entriesCreated += 1;
+        return Promise.resolve({ id: `entry-${entriesCreated}`, ...data });
+      }),
       findFirst: jest.fn().mockResolvedValue(null),
     },
     user: { update: jest.fn(() => Promise.resolve({ coins: 10 })) },

@@ -23,11 +23,28 @@ export interface HabitUncompletedEvent {
   previousKind: 'FULL' | 'MINIMUM' | 'EMERGENCY';
 }
 
+export interface HabitStreakMilestoneEvent {
+  userId: string;
+  habitId: string;
+  streak: number;
+  milestone: number;
+  date: string;
+}
+
+export interface IdentityMilestoneEvent {
+  userId: string;
+  identityId: string;
+  threshold: number;
+  date: string;
+}
+
 export type DomainEventMap = {
   'habit.completed': HabitCompletedEvent;
   'habit.minimumCompleted': HabitCompletedEvent;
   'habit.emergencyCompleted': HabitCompletedEvent;
   'habit.uncompleted': HabitUncompletedEvent;
+  'habit.streakMilestoneReached': HabitStreakMilestoneEvent;
+  'identity.milestoneReached': IdentityMilestoneEvent;
 };
 
 export type DomainEventName = keyof DomainEventMap;
