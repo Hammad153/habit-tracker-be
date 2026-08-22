@@ -68,6 +68,7 @@ const completedHabitTask = () => ({
 describe('DailyPlanService cross-endpoint completion safety', () => {
   it('marks a task complete and awards coins+XP exactly once', async () => {
     const s = makeService();
+    s.database.dailyPlanTask.findFirst.mockResolvedValue(completedHabitTask());
     s.database.tx.completion.findUnique.mockResolvedValue(null);
     s.database.tx.habit.findFirst.mockResolvedValue({
       id: 'habit-1',
@@ -86,6 +87,7 @@ describe('DailyPlanService cross-endpoint completion safety', () => {
     const s = makeService();
     // The completion row exists and is already true (created by
     // POST /habit/{id}/toggle for the same habit + day key).
+    s.database.dailyPlanTask.findFirst.mockResolvedValue(completedHabitTask());
     s.database.tx.completion.findUnique.mockResolvedValue({
       id: 'c-existing',
       habitId: 'habit-1',
@@ -113,6 +115,7 @@ describe('DailyPlanService cross-endpoint completion safety', () => {
     const s = makeService();
     const task = completedHabitTask();
     task.status = 'COMPLETED';
+    s.database.dailyPlanTask.findFirst.mockResolvedValue(task);
     // Completion was re-created through the habit endpoint -> no longer ours.
     s.database.tx.completion.findUnique.mockResolvedValue({
       id: 'c-recreated',
@@ -120,6 +123,12 @@ describe('DailyPlanService cross-endpoint completion safety', () => {
       kind: 'FULL',
       source: null,
       sourceReferenceId: null,
+    });
+    s.database.habit.findFirst.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      title: 'Read',
+      goal: 20,
     });
 
     await s.service.updateTask('user-1', 'task-1', { status: 'PENDING' });
@@ -132,6 +141,7 @@ describe('DailyPlanService cross-endpoint completion safety', () => {
   it('derives the completion day key from local calendar components', async () => {
     const s = makeService();
     const task = completedHabitTask();
+    s.database.dailyPlanTask.findFirst.mockResolvedValue(task);
     s.database.tx.completion.findUnique.mockResolvedValue(null);
     s.database.tx.habit.findFirst.mockResolvedValue({
       id: 'habit-1',
