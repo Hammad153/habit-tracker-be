@@ -220,8 +220,8 @@ export class HabitService {
 
   /**
    * Validates a proposed stack edge. `forHabitId` is omitted on creation.
-   * Ownership + self-reference + full chain cycles are enforced here —
-   * the database FK alone cannot detect logical loops.
+   * Ownership + self-reference + archived-target + full chain cycles are
+   * enforced here — the database FK alone cannot detect logical loops.
    */
   private async assertStackTarget(
     db: Tx | DatabaseService,
@@ -235,11 +235,16 @@ export class HabitService {
 
     const target = await db.habit.findFirst({
       where: { id: stackAfterHabitId, userId },
-      select: { id: true },
+      select: { id: true, isArchived: true },
     });
     if (!target) {
       throw new NotFoundException(
         `Stack target habit with ID ${stackAfterHabitId} not found`,
+      );
+    }
+    if (target.isArchived) {
+      throw new ConflictException(
+        'Habits cannot be stacked after an archived habit',
       );
     }
 
