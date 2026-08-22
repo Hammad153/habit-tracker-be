@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import { RewardsService } from './rewards.service';
 
 const p2002 = (): any => {
@@ -20,7 +19,7 @@ const makeService = () => {
     },
     $transaction: jest.fn((fn) => fn(database)),
   };
-  return { service: new RewardsService(database as any), database };
+  return { service: new RewardsService(database), database };
 };
 
 const makeTx = () => {
@@ -39,7 +38,7 @@ describe('RewardsService', () => {
     const { service } = makeService();
     const tx = makeTx();
 
-    const awarded = await service.awardForCompletion(tx as any, {
+    const awarded = await service.awardForCompletion(tx, {
       userId: 'user-1',
       completionId: 'c-1',
       kind: 'FULL',
@@ -75,9 +74,9 @@ describe('RewardsService', () => {
     tx.rewardLedger.findFirst
       .mockResolvedValueOnce({ id: 'orig-1', amount: 10 }); // reverse morning FULL
 
-    await service.awardForCompletion(tx as any, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
-    await service.reverseCompletionAward(tx as any, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
-    const reAwarded = await service.awardForCompletion(tx as any, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
+    await service.awardForCompletion(tx, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
+    await service.reverseCompletionAward(tx, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
+    const reAwarded = await service.awardForCompletion(tx, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
 
     expect(reAwarded).toBe(10);
     expect(tx.rewardLedger.create).toHaveBeenCalledTimes(3); // award, reversal, re-award
@@ -92,7 +91,7 @@ describe('RewardsService', () => {
       type: 'HABIT_COMPLETION',
     });
 
-    const reversed = await service.reverseCompletionAward(tx as any, {
+    const reversed = await service.reverseCompletionAward(tx, {
       userId: 'user-1',
       completionId: 'c-1',
       kind: 'FULL',
@@ -133,8 +132,8 @@ describe('RewardsService', () => {
       .mockResolvedValueOnce({ id: 'orig-1', amount: 10 })
       .mockResolvedValueOnce(null); // after reversal nothing reversible remains
 
-    const first = await service.reverseCompletionAward(tx as any, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
-    const second = await service.reverseCompletionAward(tx as any, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
+    const first = await service.reverseCompletionAward(tx, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
+    const second = await service.reverseCompletionAward(tx, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
 
     expect(first).toBe(10);
     expect(second).toBe(0);
@@ -150,7 +149,7 @@ describe('RewardsService', () => {
     const reversed = await service.reverseCompletionAward({
       ...tx,
       user: { update: userUpdate },
-    } as any, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
+    }, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
 
     expect(reversed).toBe(0);
     expect(userUpdate).not.toHaveBeenCalled();
@@ -160,7 +159,7 @@ describe('RewardsService', () => {
     const { service } = makeService();
     const tx = makeTx();
 
-    const reversed = await service.reverseCompletionAward(tx as any, {
+    const reversed = await service.reverseCompletionAward(tx, {
       userId: 'user-1',
       completionId: 'c-none',
       kind: 'MINIMUM',

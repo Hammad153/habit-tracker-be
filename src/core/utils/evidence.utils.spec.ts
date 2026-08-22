@@ -47,8 +47,11 @@ describe('calculateIdentityLevel', () => {
   it('crosses levels exactly at thresholds', () => {
     expect(calculateIdentityLevel(14).level).toBe(1);
     expect(calculateIdentityLevel(15).level).toBe(2);
+    expect(calculateIdentityLevel(49).level).toBe(2);
     expect(calculateIdentityLevel(50).level).toBe(3);
+    expect(calculateIdentityLevel(124).level).toBe(3);
     expect(calculateIdentityLevel(125).level).toBe(4);
+    expect(calculateIdentityLevel(249).level).toBe(4);
     expect(calculateIdentityLevel(250).level).toBe(5);
   });
 });
