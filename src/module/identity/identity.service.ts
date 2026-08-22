@@ -44,6 +44,11 @@ export interface IdentityProgress {
   completedOnDate: number;
 }
 
+interface EvidenceSnapshot {
+  countsByHabitAndKind: Map<string, EvidenceKindCounts>;
+  completedOnDate: Set<string>;
+}
+
 @Injectable()
 export class IdentityService {
   constructor(private readonly databaseSvc: DatabaseService) {}
@@ -66,6 +71,10 @@ export class IdentityService {
   /**
    * Lists identities with deterministic evidence summaries.
    *
+   * Evidence is computed with bounded aggregate queries (counts grouped by
+   * kind/habit) — the user's full completion history is never loaded into
+   * memory, no matter how long they have used the app.
+   *
    * @param date optional client-local `YYYY-MM-DD` used to compute
    *             "completed today" per identity. Never derived server-side.
    */
@@ -80,25 +89,32 @@ export class IdentityService {
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
     });
 
-    return Promise.all(
-      identities.map(async (identity) => ({
-        ...identity,
-        ...(await this.buildProgress(identity, userId, parsedDate)),
-      })),
+    const snapshot = await this.evidenceSnapshot(
+      this.databaseSvc as Db,
+      identities.map((i) => i.id),
+      parsedDate,
     );
+
+    return identities.map((identity) => ({
+      ...identity,
+      ...this.progressFromSnapshot(identity, snapshot, parsedDate),
+    }));
   }
 
   public async findOne(userId: string, id: string, date?: string) {
     const identity = await this.ensureIdentity(userId, id);
-    const progress = await this.buildProgress(
-      await this.databaseSvc.identity.findFirstOrThrow({
-        where: { id: identity.id },
-        include: identityInclude,
-      }),
-      userId,
-      this.parseClientDate(date),
+    const parsedDate = this.parseClientDate(date);
+    const [full] = await this.databaseSvc.identity.findMany({
+      where: { id: identity.id },
+      take: 1,
+      include: identityInclude,
+    });
+    const snapshot = await this.evidenceSnapshot(
+      this.databaseSvc as Db,
+      [identity.id],
+      parsedDate,
     );
-    return { ...identity, ...progress };
+    return { ...full, ...this.progressFromSnapshot(full, snapshot, parsedDate) };
   }
 
   /** Accepts only strict `YYYY-MM-DD` client-local keys; never derives one. */
@@ -146,12 +162,19 @@ export class IdentityService {
   }
 
   private async hasEvidence(userId: string, identityId: string) {
-    const completions = await this.collectCompletions(
-      this.databaseSvc as Db,
-      userId,
-      [identityId],
-    );
-    return completions.length > 0;
+    const links = await this.databaseSvc.identityHabit.findMany({
+      where: { identityId },
+      select: { habitId: true },
+    });
+    if (links.length === 0) return false;
+    const anyCompletion = await this.databaseSvc.completion.findFirst({
+      where: {
+        habitId: { in: links.map((l) => l.habitId) },
+        status: true,
+      },
+      select: { id: true },
+    });
+    return anyCompletion !== null;
   }
 
   public async linkHabit(userId: string, identityId: string, habitId: string) {
@@ -195,52 +218,76 @@ export class IdentityService {
   }
 
   /**
-   * Aggregates every successful completion recorded against the habits
-   * linked to the given identities. Evidence is always DERIVED from history;
-   * there is no separate mutable score.
+   * Bounded evidence snapshot for the given identities.
+   *
+   * Two aggregate queries total (plus one date lookup when requested),
+   * regardless of how many identities or completion rows exist:
+   *  - counts grouped by (kind, habitId): at most 3 rows per habit
+   *  - the day's completed habit ids: at most one row per habit for that day
    */
-  private async collectCompletions(
+  private async evidenceSnapshot(
     db: Db,
-    userId: string,
     identityIds: string[],
-  ) {
-    if (identityIds.length === 0) return [];
+    date?: string,
+  ): Promise<EvidenceSnapshot> {
+    if (identityIds.length === 0) {
+      return { countsByHabitAndKind: new Map(), completedOnDate: new Set() };
+    }
     const links = await db.identityHabit.findMany({
       where: { identityId: { in: identityIds } },
-      select: { habitId: true, identityId: true },
+      select: { identityId: true, habitId: true },
     });
     const habitIds = [...new Set(links.map((l) => l.habitId))];
-    if (habitIds.length === 0) return [];
-    return db.completion.findMany({
-      where: { habitId: { in: habitIds }, status: true },
-      select: { kind: true, date: true, habitId: true },
-    });
-  }
-
-  private async buildProgress(
-    identity: Prisma.IdentityGetPayload<{ include: typeof identityInclude }>,
-    userId: string,
-    date?: string,
-  ): Promise<IdentityProgress> {
-    const completions = await this.collectCompletions(
-      this.databaseSvc as Db,
-      userId,
-      [identity.id],
-    );
-
-    const kindCounts: EvidenceKindCounts = { FULL: 0, MINIMUM: 0, EMERGENCY: 0 };
-    for (const completion of completions) {
-      kindCounts[completion.kind] += 1;
+    if (habitIds.length === 0) {
+      return { countsByHabitAndKind: new Map(), completedOnDate: new Set() };
     }
 
+    const [grouped, dated] = await Promise.all([
+      db.completion.groupBy({
+        by: ['kind', 'habitId'],
+        where: { habitId: { in: habitIds }, status: true },
+        _count: { _all: true },
+      }),
+      date
+        ? db.completion.findMany({
+            where: { habitId: { in: habitIds }, date, status: true },
+            select: { habitId: true },
+          })
+        : Promise.resolve([] as Array<{ habitId: string }>),
+    ]);
+
+    const countsByHabitAndKind = new Map<string, EvidenceKindCounts>();
+    for (const row of grouped) {
+      const entry =
+        countsByHabitAndKind.get(row.habitId) ??
+        ({ FULL: 0, MINIMUM: 0, EMERGENCY: 0 } as EvidenceKindCounts);
+      entry[row.kind] += row._count._all;
+      countsByHabitAndKind.set(row.habitId, entry);
+    }
+
+    return {
+      countsByHabitAndKind,
+      completedOnDate: new Set(dated.map((c) => c.habitId)),
+    };
+  }
+
+  /** Pure aggregation of a snapshot into per-identity progress. */
+  private progressFromSnapshot(
+    identity: Prisma.IdentityGetPayload<{ include: typeof identityInclude }>,
+    snapshot: EvidenceSnapshot,
+    date?: string,
+  ): IdentityProgress {
+    const kindCounts: EvidenceKindCounts = { FULL: 0, MINIMUM: 0, EMERGENCY: 0 };
     let completedOnDate = 0;
-    if (date) {
-      const completedHabitIds = new Set(
-        completions
-          .filter((c) => c.date === date)
-          .map((c) => c.habitId),
-      );
-      completedOnDate = completedHabitIds.size;
+    for (const link of identity.habitLinks) {
+      if (date && snapshot.completedOnDate.has(link.habitId)) {
+        completedOnDate += 1;
+      }
+      const counts = snapshot.countsByHabitAndKind.get(link.habitId);
+      if (!counts) continue;
+      kindCounts.FULL += counts.FULL;
+      kindCounts.MINIMUM += counts.MINIMUM;
+      kindCounts.EMERGENCY += counts.EMERGENCY;
     }
 
     const points = calculateEvidencePoints(kindCounts);

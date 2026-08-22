@@ -478,9 +478,15 @@ export class HabitService {
             error instanceof Prisma.PrismaClientKnownRequestError &&
             error.code === 'P2002'
           ) {
-            const raced = await tx.completion.findUniqueOrThrow({
+            const raced = await tx.completion.findUnique({
               where: { habitId_date: { habitId, date } },
             });
+            if (!raced) {
+              // The raced transaction deleted the row again (on/off race).
+              throw new ConflictException(
+                'Completion state changed concurrently, please retry',
+              );
+            }
             if (raced.status) {
               return {
                 ...raced,

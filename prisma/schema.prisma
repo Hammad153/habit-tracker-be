@@ -382,10 +382,21 @@ model RewardLedger {
   type          RewardTransactionType
   referenceType String?               // e.g. "COMPLETION", "LEDGER_ENTRY"
   referenceId   String?
+  // Set when this entry reverses another ledger entry. Unique: an entry can
+  // only be reversed once, which makes reversals idempotent.
+  reversalOfId  String?
+  reversalOf    RewardLedger?         @relation("Reversals", fields: [reversalOfId], references: [id], onDelete: SetNull)
+  reversedBy    RewardLedger[]        @relation("Reversals")
   description   String?
   createdAt     DateTime              @default(now())
 
-  @@unique([type, referenceId])
+  // NOTE: awards are intentionally NOT unique per (type, referenceId): one
+  // completion may legitimately be awarded more than once across same-day
+  // kind transitions (e.g. FULL -> MINIMUM -> FULL). Double-award protection
+  // instead comes from the single completion row (habitId+date) and the
+  // transition state machine that runs inside its transaction.
+  @@unique([reversalOfId])
+  @@index([referenceType, referenceId])
   @@index([userId, createdAt])
 }
 

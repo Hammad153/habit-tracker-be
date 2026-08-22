@@ -32,12 +32,23 @@ export class DailyPlanService {
     return new Date(Number(year), Number(month) - 1, Number(day));
   }
 
+  /**
+   * Local-calendar day key. Never route through toISOString(): that projects
+   * onto UTC and shifts the day for any server east of UTC.
+   */
   private dateKey(date: Date) {
-    return date.toISOString().slice(0, 10);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private todayKey() {
+    return this.dateKey(new Date());
   }
 
   private dayWindow(value?: string) {
-    const day = this.parseDate(value) ?? this.parseDate(new Date().toISOString())!;
+    const day = this.parseDate(value ?? this.todayKey())!;
     const end = new Date(day);
     end.setHours(23, 59, 59, 999);
     return { start: day, end };
@@ -450,7 +461,7 @@ export class DailyPlanService {
   }
 
   async summary(userId: string, date?: string) {
-    const [plan] = await this.plans(userId, date ?? new Date().toISOString());
+    const [plan] = await this.plans(userId, date ?? this.todayKey());
     return {
       plan: plan ?? null,
       totalTasks: plan?.totalItems ?? 0,

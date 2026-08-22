@@ -54,6 +54,7 @@ CREATE TABLE "RewardLedger" (
     "type" "RewardTransactionType" NOT NULL,
     "referenceType" TEXT,
     "referenceId" TEXT,
+    "reversalOfId" TEXT,
     "description" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -70,10 +71,13 @@ CREATE INDEX "IdentityHabit_habitId_idx" ON "IdentityHabit"("habitId");
 CREATE UNIQUE INDEX "IdentityHabit_identityId_habitId_key" ON "IdentityHabit"("identityId", "habitId");
 
 -- CreateIndex
+CREATE INDEX "RewardLedger_referenceType_referenceId_idx" ON "RewardLedger"("referenceType", "referenceId");
+
+-- CreateIndex
 CREATE INDEX "RewardLedger_userId_createdAt_idx" ON "RewardLedger"("userId", "createdAt");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "RewardLedger_type_referenceId_key" ON "RewardLedger"("type", "referenceId");
+CREATE UNIQUE INDEX "RewardLedger_reversalOfId_key" ON "RewardLedger"("reversalOfId");
 
 -- AddForeignKey
 ALTER TABLE "Habit" ADD CONSTRAINT "Habit_stackAfterHabitId_fkey" FOREIGN KEY ("stackAfterHabitId") REFERENCES "Habit"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -89,3 +93,7 @@ ALTER TABLE "IdentityHabit" ADD CONSTRAINT "IdentityHabit_habitId_fkey" FOREIGN 
 
 -- AddForeignKey
 ALTER TABLE "RewardLedger" ADD CONSTRAINT "RewardLedger_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RewardLedger" ADD CONSTRAINT "RewardLedger_reversalOfId_fkey" FOREIGN KEY ("reversalOfId") REFERENCES "RewardLedger"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+

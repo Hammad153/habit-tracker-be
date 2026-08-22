@@ -1,26 +1,43 @@
+import { Prisma } from '@prisma/client';
 import { RewardsService } from './rewards.service';
+
+const p2002 = (): any => {
+  const err = new Error('Unique constraint');
+  (err as any).code = 'P2002';
+  return err;
+};
 
 const makeService = () => {
   const database = {
     rewardLedger: {
       aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 35 } }),
       findMany: jest.fn().mockResolvedValue([]),
-      findUnique: jest.fn(),
       create: jest.fn(({ data }) => Promise.resolve({ id: 'entry-1', ...data })),
     },
     user: {
       update: jest.fn(() => Promise.resolve({ coins: 45 })),
       findUnique: jest.fn().mockResolvedValue({ coins: 35 }),
     },
+    $transaction: jest.fn((fn) => fn(database)),
   };
   return { service: new RewardsService(database as any), database };
+};
+
+const makeTx = () => {
+  const tx = {
+    rewardLedger: {
+      create: jest.fn(({ data }) => Promise.resolve({ id: `entry-${tx.rewardLedger.create.mock.calls.length}`, ...data })),
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
+    user: { update: jest.fn(() => Promise.resolve({ coins: 10 })) },
+  };
+  return tx;
 };
 
 describe('RewardsService', () => {
   it('creates a ledger entry and increments the cached balance atomically', async () => {
     const { service } = makeService();
-    const userUpdate = jest.fn().mockResolvedValue({ coins: 10 });
-    const tx = { rewardLedger: { create: jest.fn().mockResolvedValue({}) }, user: { update: userUpdate } };
+    const tx = makeTx();
 
     const awarded = await service.awardForCompletion(tx as any, {
       userId: 'user-1',
@@ -38,7 +55,7 @@ describe('RewardsService', () => {
         referenceId: 'c-1',
       }),
     });
-    expect(userUpdate).toHaveBeenCalledWith({
+    expect(tx.user.update).toHaveBeenCalledWith({
       where: { id: 'user-1' },
       data: { coins: { increment: 10 } },
     });
@@ -50,39 +67,30 @@ describe('RewardsService', () => {
     expect(service.coinsForKind('EMERGENCY')).toBe(2);
   });
 
-  it('is idempotent under races: a duplicate award changes nothing', async () => {
+  it('allows a re-award after a reversal (same-day kind round-trip)', async () => {
+    // Regression guard: the ledger must NOT enforce uniqueness on
+    // (type, referenceId) for awards — FULL -> MINIMUM -> FULL is legal.
     const { service } = makeService();
-    const p2002: any = new Error('Unique constraint');
-    p2002.code = 'P2002';
-    const userUpdate = jest.fn();
-    const tx = {
-      rewardLedger: { create: jest.fn().mockRejectedValue(p2002) },
-      user: { update: userUpdate },
-    };
+    const tx = makeTx();
+    tx.rewardLedger.findFirst
+      .mockResolvedValueOnce({ id: 'orig-1', amount: 10 }); // reverse morning FULL
 
-    const awarded = await service.awardForCompletion(tx as any, {
-      userId: 'user-1',
-      completionId: 'c-1',
-      kind: 'FULL',
-    });
+    await service.awardForCompletion(tx as any, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
+    await service.reverseCompletionAward(tx as any, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
+    const reAwarded = await service.awardForCompletion(tx as any, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
 
-    expect(awarded).toBe(0);
-    expect(userUpdate).not.toHaveBeenCalled();
+    expect(reAwarded).toBe(10);
+    expect(tx.rewardLedger.create).toHaveBeenCalledTimes(3); // award, reversal, re-award
   });
 
-  it('reverses an award with a REVERSAL entry and decrements the balance', async () => {
-    const { service, database } = makeService();
-    database.rewardLedger.findUnique.mockResolvedValue({
+  it('reverses the latest unreversed award with a REVERSAL entry', async () => {
+    const { service } = makeService();
+    const tx = makeTx();
+    tx.rewardLedger.findFirst.mockResolvedValue({
       id: 'orig-1',
       amount: 10,
       type: 'HABIT_COMPLETION',
-      referenceId: 'c-1',
     });
-    const userUpdate = jest.fn().mockResolvedValue({ coins: 0 });
-    const tx = {
-      rewardLedger: { findUnique: database.rewardLedger.findUnique, create: jest.fn().mockResolvedValue({}) },
-      user: { update: userUpdate },
-    };
 
     const reversed = await service.reverseCompletionAward(tx as any, {
       userId: 'user-1',
@@ -91,57 +99,125 @@ describe('RewardsService', () => {
     });
 
     expect(reversed).toBe(10);
+    expect(tx.rewardLedger.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          type: 'HABIT_COMPLETION',
+          referenceType: 'COMPLETION',
+          referenceId: 'c-1',
+          reversalOfId: null,
+        }),
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }),
+    );
     expect(tx.rewardLedger.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         amount: -10,
         type: 'REVERSAL',
         referenceType: 'LEDGER_ENTRY',
         referenceId: 'orig-1',
+        reversalOfId: 'orig-1',
       }),
     });
-    expect(userUpdate).toHaveBeenCalledWith({
+    expect(tx.user.update).toHaveBeenCalledWith({
       where: { id: 'user-1' },
       data: { coins: { decrement: 10 } },
       select: { coins: true },
     });
   });
 
-  it('never double-reverses the same completion', async () => {
-    const { service, database } = makeService();
-    database.rewardLedger.findUnique.mockResolvedValue({
-      id: 'orig-1',
-      amount: 10,
-      type: 'HABIT_COMPLETION',
-      referenceId: 'c-1',
-    });
-    const p2002: any = new Error('Unique constraint');
-    p2002.code = 'P2002';
-    const userUpdate = jest.fn();
-    const tx = {
-      rewardLedger: {
-        findUnique: database.rewardLedger.findUnique,
-        create: jest.fn().mockRejectedValue(p2002),
-      },
-      user: { update: userUpdate },
-    };
+  it('never double-reverses: unique(reversalOfId) makes the second attempt a no-op', async () => {
+    const { service } = makeService();
+    const tx = makeTx();
+    tx.rewardLedger.findFirst
+      .mockResolvedValueOnce({ id: 'orig-1', amount: 10 })
+      .mockResolvedValueOnce(null); // after reversal nothing reversible remains
 
-    const reversed = await service.reverseCompletionAward(tx as any, {
-      userId: 'user-1',
-      completionId: 'c-1',
-      kind: 'FULL',
-    });
+    const first = await service.reverseCompletionAward(tx as any, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
+    const second = await service.reverseCompletionAward(tx as any, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
+
+    expect(first).toBe(10);
+    expect(second).toBe(0);
+  });
+
+  it('treats a lost reversal race (P2002) as already-reversed', async () => {
+    const { service } = makeService();
+    const tx = makeTx();
+    tx.rewardLedger.findFirst.mockResolvedValue({ id: 'orig-1', amount: 10 });
+    tx.rewardLedger.create.mockRejectedValue(p2002());
+    const userUpdate = jest.fn();
+
+    const reversed = await service.reverseCompletionAward({
+      ...tx,
+      user: { update: userUpdate },
+    } as any, { userId: 'u', completionId: 'c-1', kind: 'FULL' });
 
     expect(reversed).toBe(0);
     expect(userUpdate).not.toHaveBeenCalled();
   });
 
-  it('reports ledger vs cached consistency for the balance endpoint', async () => {
+  it('does nothing when there is no prior award to reverse', async () => {
+    const { service } = makeService();
+    const tx = makeTx();
+
+    const reversed = await service.reverseCompletionAward(tx as any, {
+      userId: 'user-1',
+      completionId: 'c-none',
+      kind: 'MINIMUM',
+    });
+
+    expect(reversed).toBe(0);
+    expect(tx.rewardLedger.create).not.toHaveBeenCalled();
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it('reconciles the authoritative ledger balance against the cached value', async () => {
     const { service, database } = makeService();
     const ok = await service.getBalance('user-1');
     expect(ok).toEqual({ balance: 35, cachedBalance: 35, consistent: true });
 
     database.rewardLedger.aggregate.mockResolvedValue({ _sum: { amount: 40 } });
-    const drifted = await service.getBalance('user-1');
-    expect(drifted.consistent).toBe(false);
+    const drifted = await service.reconcileBalance('user-1');
+    expect(drifted).toEqual({
+      ledgerBalance: 40,
+      cachedUserBalance: 35,
+      difference: -5,
+      consistent: false,
+    });
+  });
+
+  it('repairs drift explicitly and auditable, only when authorized to run', async () => {
+    const { service, database } = makeService();
+    database.rewardLedger.aggregate.mockResolvedValue({ _sum: { amount: 40 } });
+    database.user.findUnique.mockResolvedValue({ coins: 35 });
+
+    const result = await service.repairBalanceFromCache('user-1', { authorizedBy: 'admin-7' });
+
+    expect(result).toEqual({ adjustedBy: -5 });
+    expect(database.rewardLedger.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'user-1',
+        amount: -5,
+        type: 'ADJUSTMENT',
+        referenceType: 'MANUAL_REPAIR',
+        referenceId: 'admin-7',
+      }),
+    });
+  });
+
+  it('is a no-op repair when balances already agree', async () => {
+    const { service, database } = makeService();
+    const result = await service.repairBalanceFromCache('user-1');
+
+    expect(result).toEqual({ adjustedBy: 0 });
+    expect(database.rewardLedger.create).not.toHaveBeenCalled();
+  });
+
+  it('caps transaction history page size', async () => {
+    const { service, database } = makeService();
+    await service.listTransactions('user-1', { take: 5000 });
+    expect(database.rewardLedger.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 100 }),
+    );
   });
 });

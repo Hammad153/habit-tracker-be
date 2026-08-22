@@ -225,7 +225,7 @@ describe('HabitService.toggleCompletion', () => {
         }),
       ),
     );
-    s.tx.completion.findUniqueOrThrow.mockResolvedValue(racedRow);
+    s.tx.completion.findUnique.mockResolvedValue(racedRow);
 
     const result = await s.service.toggleCompletion(
       'habit-1',
@@ -339,6 +339,78 @@ describe('HabitService.toggleCompletion', () => {
 
     expect(s.profileSvc.addExperienceTx).not.toHaveBeenCalled();
     expect(s.rewardsSvc.awardForCompletion).not.toHaveBeenCalled();
+  });
+
+  it('conserves coins across a same-day FULL -> MINIMUM -> FULL round trip', async () => {
+    // Net coin effect after the full matrix must equal one FULL grant (10).
+    const runLeg = async (
+      existing: any,
+      leg: { value?: number; kind?: 'FULL' | 'MINIMUM' },
+      award: number,
+      reverse: number,
+    ) => {
+      const s = makeService();
+      s.database.habit.findUnique.mockResolvedValue(
+        habit({ minimumBehavior: 'Read one page' }),
+      );
+      s.database.completion.findUnique.mockResolvedValue(existing);
+      s.tx.completion.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...existing, ...data }),
+      );
+      s.rewardsSvc.awardForCompletion.mockResolvedValue(award);
+      s.rewardsSvc.reverseCompletionAward.mockResolvedValue(reverse);
+      const result = await s.service.toggleCompletion(
+        'habit-1',
+        'user-1',
+        '2026-08-22',
+        leg.value,
+        leg.kind,
+      );
+      return { s, delta: result.rewards?.coinsAwarded ?? 0 };
+    };
+
+    // Morning: +10 FULL
+    const morning = await runLeg(null, {}, 10, 10);
+    // Afternoon: -10 reversed, +3 MINIMUM
+    const afternoon = await runLeg(
+      { id: 'c-x', status: true, kind: 'FULL', value: 20, date: '2026-08-22', habitId: 'habit-1' },
+      { kind: 'MINIMUM', value: 20 },
+      3,
+      10,
+    );
+    // Evening: -3 reversed, +10 re-granted (requires the ledger to allow re-awards)
+    const evening = await runLeg(
+      { id: 'c-x', status: true, kind: 'MINIMUM', value: 20, date: '2026-08-22', habitId: 'habit-1' },
+      { kind: 'FULL', value: 20 },
+      10,
+      3,
+    );
+
+    expect(morning.delta).toBe(10);
+    expect(afternoon.delta).toBe(-7);
+    expect(evening.delta).toBe(7);
+    expect(morning.delta + afternoon.delta + evening.delta).toBe(10);
+    // XP granted exactly once across the whole day.
+    expect(morning.s.profileSvc.addExperienceTx).toHaveBeenCalledTimes(1);
+    expect(afternoon.s.profileSvc.addExperienceTx).not.toHaveBeenCalled();
+    expect(evening.s.profileSvc.addExperienceTx).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a retryable conflict instead of a 500 when the raced row disappears', async () => {
+    const s = makeService();
+    s.database.habit.findUnique.mockResolvedValue(habit());
+    s.database.completion.findUnique.mockResolvedValue(null);
+    s.tx.completion.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique', {
+        code: 'P2002',
+        clientVersion: 'test',
+      }),
+    );
+    s.tx.completion.findUnique.mockResolvedValue(null);
+
+    await expect(
+      s.service.toggleCompletion('habit-1', 'user-1', '2026-08-22'),
+    ).rejects.toThrow(ConflictException);
   });
 });
 
