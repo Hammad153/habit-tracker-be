@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
   IsArray,
   IsDateString,
   IsIn,
@@ -8,6 +9,8 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
+  MaxLength,
   Min,
 } from 'class-validator';
 
@@ -17,6 +20,8 @@ export const SCHEDULE_TYPES = [
   'times_per_week',
   'interval',
 ] as const;
+
+export const COMPLETION_KINDS = ['FULL', 'MINIMUM', 'EMERGENCY'] as const;
 
 export class CreateHabitDto {
   @ApiProperty({
@@ -158,4 +163,76 @@ export class CreateHabitDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  @ApiPropertyOptional({
+    example: '20:00',
+    description:
+      'Implementation intention time, local HH:mm. Part of "I will [behavior] at [time] in [location]".',
+  })
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
+    message: 'scheduledTime must be formatted as HH:mm',
+  })
+  scheduledTime?: string;
+
+  @ApiPropertyOptional({
+    example: 'Bedroom',
+    description: 'Implementation intention location.',
+    maxLength: 120,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  location?: string;
+
+  @ApiPropertyOptional({
+    example: 'Read 20 pages',
+    description: 'The full version of the habit, described behaviorally.',
+    maxLength: 200,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  fullBehavior?: string;
+
+  @ApiPropertyOptional({
+    example: 'Open my book and read one page',
+    description:
+      'The 2-minute/minimum version that preserves consistency on hard days.',
+    maxLength: 200,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  minimumBehavior?: string;
+
+  @ApiPropertyOptional({
+    example: 'Read one paragraph',
+    description: 'The emergency fallback version for very hard days.',
+    maxLength: 200,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  emergencyMinimum?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Habit stacking cue: after THIS habit completes, the new habit runs. Cycles are rejected.',
+  })
+  @IsOptional()
+  @IsString()
+  stackAfterHabitId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: 10,
+    description:
+      'Identities this habit builds evidence for. Ownership is enforced server-side.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  identityIds?: string[];
 }

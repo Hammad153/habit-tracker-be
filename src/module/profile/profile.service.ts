@@ -4,6 +4,7 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../core/database/database.service';
 import * as bcrypt from 'bcryptjs';
 import { SALT_ROUND } from '../../constants';
@@ -14,6 +15,8 @@ import {
   calculatePerfectDays,
 } from '../../core/utils/streak.utils';
 import { calculateNeededXp } from '../../core/utils/progression.utils';
+
+type Tx = Prisma.TransactionClient;
 
 @Injectable()
 export class ProfileService {
@@ -80,20 +83,32 @@ export class ProfileService {
         ...(data.avatar !== undefined ? { avatar: data.avatar } : {}),
       },
     });
-    const { password, refreshToken, ...safe } = user;
+    const safe = { ...user } as Partial<typeof user>;
+    delete safe.password;
+    delete safe.refreshToken;
     return safe;
   }
 
   public async addExperience(userId: string, amount: number) {
-    const user = await this.databaseSvc.user.findUnique({
+    return this.databaseSvc.$transaction((tx) =>
+      this.addExperienceTx(tx, userId, amount),
+    );
+  }
+
+  /**
+   * XP mutation that participates in an existing transaction so completion +
+   * rewards stay atomic. Preserves the historical semantics: user.xp holds
+   * experience within the current level, overflowing into higher levels.
+   */
+  public async addExperienceTx(tx: Tx, userId: string, amount: number) {
+    const user = await tx.user.findUnique({
       where: { id: userId },
+      select: { xp: true, level: true },
     });
 
-    if (!user) return;
+    if (!user) return null;
 
-    let newXp = user.xp + amount;
-    if (newXp < 0) newXp = 0;
-
+    let newXp = Math.max(user.xp + amount, 0);
     let newLevel = user.level;
     let neededXp = calculateNeededXp(newLevel);
 
@@ -103,12 +118,13 @@ export class ProfileService {
       neededXp = calculateNeededXp(newLevel);
     }
 
-    return this.databaseSvc.user.update({
+    return tx.user.update({
       where: { id: userId },
       data: {
         xp: newXp,
         level: newLevel,
       },
+      select: { id: true, xp: true, level: true },
     });
   }
 

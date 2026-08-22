@@ -66,14 +66,14 @@ export class HabitController {
   @ToggleCompletionDocs()
   toggleCompletion(
     @Param('id') id: string,
-    @Body() { date, value }: ToggleCompletionDto,
+    @Body() { date, value, kind }: ToggleCompletionDto,
     @CurrentUser() userId: string,
   ) {
-    return this.habitSvc.toggleCompletion(id, userId, date, value);
+    return this.habitSvc.toggleCompletion(id, userId, date, value, kind);
   }
 
   @Post('cleanup')
-  async cleanupExpiredHabits(@CurrentUser() userId: string) {
+  async cleanupExpiredHabits() {
     const count = await this.habitSvc.cleanupExpiredHabits();
     return { message: `Cleaned up ${count} expired habit(s)`, count };
   }

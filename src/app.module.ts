@@ -23,6 +23,9 @@ import { ReminderModule } from './module/reminder/reminder.module';
 import { BudgetModule } from './module/budget/budget.module';
 import { DailyPlanModule } from './module/daily-plan/daily-plan.module';
 import { JournalModule } from './module/journal/journal.module';
+import { IdentityModule } from './module/identity/identity.module';
+import { RewardsModule } from './module/rewards/rewards.module';
+import { DomainEventsModule } from './core/events/domain-events.module';
 import { configValidationSchema } from './core/config/config.validation';
 
 @Module({
@@ -54,6 +57,9 @@ import { configValidationSchema } from './core/config/config.validation';
     BudgetModule,
     DailyPlanModule,
     JournalModule,
+    IdentityModule,
+    RewardsModule,
+    DomainEventsModule,
   ],
   controllers: [AppController],
   providers: [

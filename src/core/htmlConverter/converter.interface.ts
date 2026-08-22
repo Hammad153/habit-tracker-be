@@ -1,5 +1,5 @@
-export interface IEjf2PdfPayload {}
+export type IEjf2PdfPayload = Record<string, unknown>;
 
 export interface IHtmlTemplateContext {
-  [key: string]: string | any[] | any;
+  [key: string]: unknown;
 }

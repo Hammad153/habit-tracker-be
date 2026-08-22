@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../core/database/database.service';
 import { AwardsService } from '../awards/awards.service';
 import { ProfileService } from '../profile/profile.service';
+import { RewardsService } from '../rewards/rewards.service';
 import { XP_PER_COMPLETION } from '../../core/utils/progression.utils';
 import {
   CreateDailyPlanDto,
@@ -19,6 +20,7 @@ export class DailyPlanService {
     private readonly databaseSvc: DatabaseService,
     private readonly profileSvc: ProfileService,
     private readonly awardsSvc: AwardsService,
+    private readonly rewardsSvc: RewardsService,
   ) {}
 
   private parseDate(value?: string) {
@@ -208,12 +210,33 @@ export class DailyPlanService {
     }
   }
 
+  /**
+   * All completion-mutating paths run inside caller transactions; reward
+   * ledger writes must share those transactions to stay consistent.
+   */
+  private asTx(db: Db): Prisma.TransactionClient {
+    return db as unknown as Prisma.TransactionClient;
+  }
+
   private async removeDailyPlanCompletion(habitId: string | null, taskId: string, db: Db) {
     if (!habitId) return false;
     const completion = await db.completion.findFirst({
       where: { habitId, source: 'DAILY_PLAN', sourceReferenceId: taskId } as any,
     });
     if (!completion) return false;
+    if (completion.status) {
+      // Reverse the coin grant in the same transaction as the deletion so
+      // the ledger never diverges from reality.
+      const owner = await db.habit.findUniqueOrThrow({
+        where: { id: habitId },
+        select: { userId: true },
+      });
+      await this.rewardsSvc.reverseCompletionAward(this.asTx(db), {
+        userId: owner.userId,
+        completionId: completion.id,
+        kind: completion.kind,
+      });
+    }
     await db.completion.delete({ where: { id: completion.id } });
     return completion.status;
   }
@@ -226,8 +249,9 @@ export class DailyPlanService {
 
     if (nextStatus === 'COMPLETED') {
       if (existing?.status) return { xpDelta: 0, shouldCheckAwards: false };
+      let completion;
       if (existing) {
-        await db.completion.update({
+        completion = await db.completion.update({
           where: { id: existing.id },
           data: {
             status: true,
@@ -237,7 +261,7 @@ export class DailyPlanService {
           } as any,
         });
       } else {
-        await db.completion.create({
+        completion = await db.completion.create({
           data: {
             habitId: task.habitId,
             date,
@@ -248,11 +272,22 @@ export class DailyPlanService {
           } as any,
         });
       }
+      await this.rewardsSvc.awardForCompletion(this.asTx(db), {
+        userId,
+        completionId: completion.id,
+        kind: 'FULL',
+        habitTitle: habit?.title,
+      });
       return { xpDelta: XP_PER_COMPLETION, shouldCheckAwards: true };
     }
 
     const sourcedCompletion = existing as any;
     if (task.status === 'COMPLETED' && sourcedCompletion?.source === 'DAILY_PLAN' && sourcedCompletion.sourceReferenceId === task.id) {
+      await this.rewardsSvc.reverseCompletionAward(this.asTx(db), {
+        userId,
+        completionId: sourcedCompletion.id,
+        kind: sourcedCompletion.kind,
+      });
       await db.completion.delete({ where: { id: sourcedCompletion.id } });
       return { xpDelta: -XP_PER_COMPLETION, shouldCheckAwards: false };
     }

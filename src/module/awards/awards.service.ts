@@ -67,7 +67,7 @@ export class AwardsService {
               badgeId,
             },
           });
-        } catch (e) {
+        } catch {
           // Ignore if badge doesn't exist in DB
         }
       }

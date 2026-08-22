@@ -1,6 +1,6 @@
 import { join } from 'path';
+import ejs from 'ejs';
 import { IHtmlTemplateContext } from './converter.interface';
-const ejs = require('ejs');
 import { PuppeteerService } from '../puppetter';
 
 export class HtmlConverterService {
@@ -8,7 +8,7 @@ export class HtmlConverterService {
     value: string,
     context: IHtmlTemplateContext,
   ): Promise<string> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       resolve(ejs.render(value, context));
     });
   }
@@ -23,7 +23,8 @@ export class HtmlConverterService {
         context,
         (err, data) => {
           if (err) {
-            reject(JSON.stringify(err));
+            reject(err);
+            return;
           }
           resolve(data);
         },
@@ -31,12 +32,12 @@ export class HtmlConverterService {
     });
   }
 
-  public async toImageBuffer(htmlContent: string): Promise<Buffer> {
-    return this.generateImage(htmlContent, 'html') as any;
+  public toImageBuffer(htmlContent: string): Promise<Buffer> {
+    return this.generateImage(htmlContent, 'html') as Promise<Buffer>;
   }
 
-  public async toImageBufferWithUrl(url: string): Promise<Buffer> {
-    return this.generateImage(url, 'url') as any;
+  public toImageBufferWithUrl(url: string): Promise<Buffer> {
+    return this.generateImage(url, 'url') as Promise<Buffer>;
   }
 
   public toPdfBuffer(
@@ -47,13 +48,17 @@ export class HtmlConverterService {
       ejs.renderFile(
         join(process.cwd(), '', 'templates', templateName),
         context,
-        async (err, data) => {
+        (err, data) => {
           if (err) {
             console.log(err, 'error..');
-            reject(JSON.stringify(err));
+            reject(err);
+            return;
           }
 
-          resolve((await this.generatePdf(data, 'html')) as any);
+          this.generatePdf(String(data), 'html').then(
+            (pdf) => resolve(Buffer.from(pdf)),
+            reject,
+          );
         },
       );
     });

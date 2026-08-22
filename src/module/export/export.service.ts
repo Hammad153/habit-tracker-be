@@ -54,7 +54,12 @@ export class ExportService {
     const user = await this.loadUserWithData(userId);
 
     const escape = (v: unknown): string => {
-      const s = v === null || v === undefined ? '' : String(v);
+      const s =
+        typeof v === 'string'
+          ? v
+          : v === null || v === undefined
+            ? ''
+            : JSON.stringify(v) ?? '';
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
 
