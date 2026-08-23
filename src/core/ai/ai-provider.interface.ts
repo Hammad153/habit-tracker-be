@@ -41,7 +41,13 @@ export const AI_PROVIDER = 'AI_PROVIDER';
 export interface AiProvider {
   readonly name: string;
   readonly model: string | null;
+  /** Validated coach-shaped language (Phase 3.3 contract). */
   generateCoachResponse(input: CoachPromptInput): Promise<CoachLanguage>;
+  /**
+   * Raw text payload for OTHER structured contracts (e.g. weekly reviews).
+   * One attempt, normalized errors; parsing/validation belongs to the caller.
+   */
+  generateRawText(input: CoachPromptInput): Promise<string>;
 }
 
 /** Raised for any provider-side failure; details are safe to log, not to leak. */

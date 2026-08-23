@@ -1,5 +1,6 @@
+import { COACH_TONE_VALUES } from '../../../utils/coach-preference.utils';
 import type { CoachTone } from '../../ai-provider.interface';
-import { IsIn, IsOptional, IsString, Length } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, Length } from 'class-validator';
 
 /**
  * Environment-based NVIDIA configuration (spec §3).
@@ -67,4 +68,42 @@ export class CoachLanguageDto {
   @IsString()
   @Length(1, 60)
   actionLabel?: string;
+}
+
+
+/** Phase 3.4 — validated structured output for weekly behavioral reviews. */
+export class WeeklyReviewLanguageDto {
+  @IsString()
+  @Length(3, 80)
+  headline!: string;
+
+  @IsString()
+  @Length(1, 480)
+  summary!: string;
+
+  @IsArray()
+  @ArrayMaxSize(4)
+  @IsString({ each: true })
+  @Length(1, 120, { each: true })
+  wins!: string[];
+
+  @IsArray()
+  @ArrayMaxSize(4)
+  @IsString({ each: true })
+  @Length(1, 120, { each: true })
+  patterns!: string[];
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 320)
+  identityReflection?: string;
+
+  @IsArray()
+  @ArrayMaxSize(2)
+  @IsString({ each: true })
+  @Length(1, 160, { each: true })
+  nextWeekFocus!: string[];
+
+  @IsIn(COACH_TONE_VALUES as unknown as string[])
+  tone!: string;
 }

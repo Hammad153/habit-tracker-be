@@ -63,6 +63,13 @@ export class NvidiaProvider implements AiProvider {
     }
   }
 
+  async generateRawText(input: CoachPromptInput): Promise<string> {
+    if (!this.config) {
+      throw new AiProviderError('provider not configured', 'NOT_CONFIGURED');
+    }
+    return this.attempt(input);
+  }
+
   // -------------------------------------------------------------------------
 
   private async attempt(input: CoachPromptInput): Promise<string> {
