@@ -16,11 +16,13 @@ const p2002 = () =>
   });
 
 const TODAY = '2026-08-22';
-jest.spyOn(Date.prototype, 'toISOString').mockImplementation(function (
-  this: Date,
-) {
-  // Freeze "now" at noon UTC of TODAY for deterministic comparisons.
-  return new Date(`${TODAY}T12:00:00.000Z`).toISOString();
+// Freeze "now" at noon UTC of TODAY for deterministic comparisons.
+beforeAll(() => {
+  jest.useFakeTimers();
+  jest.setSystemTime(new Date(`${TODAY}T12:00:00.000Z`));
+});
+afterAll(() => {
+  jest.useRealTimers();
 });
 
 function makeDb(options?: {
