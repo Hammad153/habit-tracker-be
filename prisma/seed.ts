@@ -93,6 +93,64 @@ async function main() {
     });
   }
 
+  // Reward Shop starter catalog.
+  // `key` is the stable, deterministic identifier (@unique in the schema), so
+  // re-running the seed upserts instead of duplicating. Existing rows are left
+  // untouched (update: {}) — admin price/status changes and any user
+  // redemptions referencing these items are never modified or deleted.
+  const rewardItems: {
+    key: string;
+    name: string;
+    description: string;
+    cost: number;
+    type: 'THEME' | 'AVATAR' | 'JOURNAL_THEME' | 'CELEBRATION';
+  }[] = [
+    {
+      key: 'theme-golden',
+      name: 'Golden Theme',
+      description: 'A luxurious golden interface theme for the whole app.',
+      cost: 500,
+      type: 'THEME',
+    },
+    {
+      key: 'theme-focus',
+      name: 'Focus Theme',
+      description: 'A calm, low-distraction theme built for deep work sessions.',
+      cost: 300,
+      type: 'THEME',
+    },
+    {
+      key: 'theme-journal',
+      name: 'Journal Theme',
+      description: 'A warm, paper-inspired look for your journal entries.',
+      cost: 200,
+      type: 'JOURNAL_THEME',
+    },
+    {
+      key: 'avatar-frame-golden',
+      name: 'Golden Avatar Frame',
+      description: 'Show off your dedication with a shining golden profile frame.',
+      cost: 250,
+      type: 'AVATAR',
+    },
+    {
+      key: 'pack-celebration',
+      name: 'Celebration Pack',
+      description: 'Confetti and fanfare effects for every milestone you unlock.',
+      cost: 150,
+      type: 'CELEBRATION',
+    },
+  ];
+
+  for (const item of rewardItems) {
+    await prisma.rewardItem.upsert({
+      where: { key: item.key },
+      update: {},
+      create: item,
+    });
+  }
+  console.log(`Seeded ${rewardItems.length} reward shop items.`);
+
   console.log('Seed completed!');
 }
 
