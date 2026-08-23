@@ -91,7 +91,23 @@ function makeDb(options?: {
     },
   };
 
-  const db = { $transaction: jest.fn((fn: any) => fn(tx)) };
+  // Model real DB atomicity: a rejected transaction rolls back every write
+  // it made (mirrors Postgres aborting the whole tx on constraint violation).
+  const db = {
+    $transaction: jest.fn(async (fn: any) => {
+      const coinsBase = state.coins;
+      const entryBase = state.entries.length;
+      const freezeBase = state.freezes.length;
+      try {
+        return await fn(tx);
+      } catch (e) {
+        state.coins = coinsBase;
+        state.entries.length = entryBase;
+        state.freezes.length = freezeBase;
+        throw e;
+      }
+    }),
+  };
   const ledgerSum = () => state.entries.reduce((s, e) => s + e.amount, 0);
   return { service: new StreakFreezeService(db as any), tx, state, ledgerSum };
 }
