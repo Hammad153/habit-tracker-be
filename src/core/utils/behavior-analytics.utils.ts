@@ -872,6 +872,8 @@ export interface BehaviorReport {
   signals: string[];
   structuredSignals: StructuredSignal[];
   insufficientHistory: boolean;
+  /** True when the habit is already completed on the analysis date. */
+  completedToday: boolean;
 }
 
 export const buildBehaviorReport = (input: BehaviorReportInput): BehaviorReport => {
@@ -918,6 +920,9 @@ export const buildBehaviorReport = (input: BehaviorReportInput): BehaviorReport 
   );
 
   const hasAnyCompletion = completions.some((c) => c.status === true);
+  const completedToday = completions.some(
+    (c) => c.date === todayKey && c.status === true,
+  );
 
   const difficulty = detectDifficulty({
     minimumShare7:
@@ -979,6 +984,7 @@ export const buildBehaviorReport = (input: BehaviorReportInput): BehaviorReport 
   });
 
   return {
+    completedToday,
     habitId: habit.id,
     habitTitle: habit.title ?? habit.id,
     isArchived: habit.isArchived === true,

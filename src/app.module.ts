@@ -18,6 +18,7 @@ import { MailerModule } from './module/mailer/mailer.module';
 import { TemplateModule } from './module/template/template.module';
 import { SubscriptionModule } from './module/subscription/subscription.module';
 import { AnalyticsModule } from './module/analytics/analytics.module';
+import { InterventionModule } from './module/intervention/intervention.module';
 import { ExportModule } from './module/export/export.module';
 import { ReminderModule } from './module/reminder/reminder.module';
 import { BudgetModule } from './module/budget/budget.module';
@@ -52,6 +53,7 @@ import { configValidationSchema } from './core/config/config.validation';
     TemplateModule,
     SubscriptionModule,
     AnalyticsModule,
+    InterventionModule,
     ExportModule,
     ReminderModule,
     BudgetModule,
