@@ -36,6 +36,7 @@ const TODAY = '2026-08-23'; // Sunday
 
 const baseCtx: InterventionHabitContext = {
   habitId: 'habit-1',
+  habitTitle: 'Read',
   todayKey: TODAY,
   cueTime: null,
   fullBehavior: 'Run 5km',

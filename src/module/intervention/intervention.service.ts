@@ -77,12 +77,27 @@ export class InterventionService {
     habitId: string,
     date?: string,
   ): Promise<{ intervention: Intervention | null }> {
+    const { intervention } = await this.getForHabitWithIntervention(
+      userId,
+      habitId,
+      date,
+    );
+    return { intervention };
+  }
+
+  /** Full result incl. the controlled context used by the AI coach layer. */
+  public async getForHabitWithIntervention(
+    userId: string,
+    habitId: string,
+    date?: string,
+  ): Promise<{ intervention: Intervention | null; context: InterventionHabitContext }> {
     const todayKey = InterventionService.resolveTodayKey(date);
 
     const habit = await this.databaseSvc.habit.findFirst({
       where: { id: habitId, userId },
       select: {
         id: true,
+        title: true,
         isArchived: true,
         scheduledTime: true,
         fullBehavior: true,
@@ -115,6 +130,7 @@ export class InterventionService {
     const ctx: InterventionHabitContext = {
       habitId,
       todayKey,
+      habitTitle: habit.title ?? habit.id,
       cueTime: habit.scheduledTime ?? null,
       fullBehavior: habit.fullBehavior ?? null,
       minimumBehavior: habit.minimumBehavior ?? null,
@@ -139,7 +155,7 @@ export class InterventionService {
     };
 
     const evaluated = evaluateIntervention(report, ctx);
-    if (!evaluated) return { intervention: null };
+    if (!evaluated) return { intervention: null, context: ctx };
 
     return {
       intervention: {
@@ -151,6 +167,7 @@ export class InterventionService {
           todayKey,
         ),
       },
+      context: ctx,
     };
   }
 

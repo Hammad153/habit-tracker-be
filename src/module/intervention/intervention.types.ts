@@ -78,6 +78,7 @@ export interface CrossHabitInsight {
  */
 export interface InterventionHabitContext {
   habitId: string;
+  habitTitle: string;
   todayKey: string;
   cueTime: string | null;
   fullBehavior: string | null;
