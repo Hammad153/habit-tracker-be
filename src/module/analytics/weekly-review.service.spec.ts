@@ -218,16 +218,16 @@ describe('WeeklyReviewService — AI success, failure, fallback', () => {
   });
 
   it.each([
-    ['timeout rejection', Promise.reject(new Error('TIMEOUT'))],
-    ['429-style provider error', Promise.reject(new Error('RATE_LIMITED'))],
-    ['500-style provider error', Promise.reject(new Error('HTTP_ERROR'))],
-    ['network failure', Promise.reject(new TypeError('fetch failed'))],
-    ['malformed JSON', Promise.resolve('definitely not json')],
-    ['empty response', Promise.resolve('')],
-    ['schema violation', Promise.resolve(JSON.stringify({ message: 'only' }))],
+    ['timeout rejection', () => Promise.reject(new Error('TIMEOUT'))],
+    ['429-style provider error', () => Promise.reject(new Error('RATE_LIMITED'))],
+    ['500-style provider error', () => Promise.reject(new Error('HTTP_ERROR'))],
+    ['network failure', () => Promise.reject(new TypeError('fetch failed'))],
+    ['malformed JSON', () => Promise.resolve('definitely not json')],
+    ['empty response', () => Promise.resolve('')],
+    ['schema violation', () => Promise.resolve(JSON.stringify({ message: 'only' }))],
   ])('%s → deterministic fallback with real numbers', async (_name, behavior) => {
     const { svc, aiProvider } = makeDeps();
-    aiProvider.generateRawText.mockImplementation(() => behavior);
+    aiProvider.generateRawText.mockImplementation(() => behavior());
     const res = await svc.getWeeklyReview('u1', WEEK.start);
     expect(res.ai).toMatchObject({ provider: 'fallback', generated: false });
     expect(res.review!.summary).toMatch(/\d+%|not enough/i);
