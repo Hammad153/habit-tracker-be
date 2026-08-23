@@ -147,14 +147,14 @@ export class RewardEngineService {
     if (ctx.rules?.streakBonusEnabled !== false && base > 0) {
       const claim = await this.claimStreakMilestones(tx, ctx);
       streak = claim.streak;
-      for (const m of claim.awarded) {
+      for (const award of claim.awarded) {
         lines.push({
           code: 'STREAK_MILESTONE',
-          label: `${m}-day streak`,
-          amount: STREAK_MILESTONE_BONUS,
+          label: `${award.milestone}-day streak`,
+          amount: award.amount,
         });
-        total += STREAK_MILESTONE_BONUS;
-        newMilestones.push(m);
+        total += award.amount;
+        newMilestones.push(award.milestone);
       }
     }
 
@@ -244,7 +244,7 @@ export class RewardEngineService {
   private async claimStreakMilestones(
     tx: Tx,
     ctx: CompletionRewardContext,
-  ): Promise<{ streak: number; awarded: number[] }> {
+  ): Promise<{ streak: number; awarded: Array<{ milestone: number; amount: number }> }> {
     const completedKeys = await this.recentCompletedKeys(tx, ctx.habitId);
     const frozenKeys = await this.frozenKeysForHabit(tx, ctx.habitId);
     const { streak, cycleStart } = computeCurrentStreak(
@@ -264,7 +264,7 @@ export class RewardEngineService {
     });
     const claimedSet = new Set(claimed.map((c) => c.idempotencyKey));
 
-    const awarded: number[] = [];
+    const awarded: Array<{ milestone: number; amount: number }> = [];
     for (const m of STREAK_MILESTONES) {
       if (streak < m) break;
       const key = streakMilestoneKey(ctx.habitId, m, cycleStart);
@@ -279,7 +279,7 @@ export class RewardEngineService {
           idempotencyKey: key,
           description: `${m}-day streak on ${ctx.habitTitle ?? ctx.habitId}`,
         });
-        awarded.push(m);
+        awarded.push({ milestone: m, amount: bonus });
       } catch (err) {
         if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2002') {
           continue; // concurrent claim won; fine

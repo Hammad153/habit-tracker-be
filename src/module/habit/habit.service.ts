@@ -567,11 +567,18 @@ export class HabitService {
           coinsDelta += breakdown.total;
 
           if (transitionToCompleted) {
-            // MAKE IT ATTRACTIVE: unlock temptation bundles on first win.
-            await tx.temptationBundle.updateMany({
-              where: { habitId, status: 'LOCKED' },
-              data: { status: 'UNLOCKED', unlockedAt: new Date() },
-            });
+            // MAKE IT ATTRACTIVE — AUTHORITATIVE RULE: a temptation bundle is
+            // the reward for the complete intended behavior, so ONLY a FULL
+            // completion unlocks it. MINIMUM/EMERGENCY preserve streak,
+            // identity evidence and coins, but never release the temptation
+            // reward. Unlock is one-way and idempotent (LOCKED -> UNLOCKED
+            // via updateMany); bundles are never re-locked by toggle-offs.
+            if (kind === 'FULL') {
+              await tx.temptationBundle.updateMany({
+                where: { habitId, status: 'LOCKED' },
+                data: { status: 'UNLOCKED', unlockedAt: new Date() },
+              });
+            }
             // Virtual Reward Fund: naira allocation on FULL completions only.
             if (kind === 'FULL' && habit.rewardFundAmount) {
               try {
