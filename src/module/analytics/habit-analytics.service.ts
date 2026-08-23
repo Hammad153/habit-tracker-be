@@ -38,6 +38,14 @@ export class HabitAnalyticsService {
     if (!DAY_KEY_PATTERN.test(asOf)) {
       throw new BadRequestException('date must be formatted as YYYY-MM-DD');
     }
+    // Regex accepts impossible calendar dates (2026-13-40) — verify for real.
+    const parsed = new Date(`${asOf}T00:00:00.000Z`);
+    if (
+      Number.isNaN(parsed.getTime()) ||
+      parsed.toISOString().slice(0, 10) !== asOf
+    ) {
+      throw new BadRequestException('date must be a valid calendar date');
+    }
     return asOf;
   }
 

@@ -86,7 +86,9 @@ describe('HabitAnalyticsService', () => {
     expect(report.isArchived).toBe(false);
     expect(report.analyzedAsOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(report.timezoneUsed).toBe('UTC'); // no user tz stored -> fallback
-    expect(report.completionRates.d7.rate).toBe(1);
+    // Window Aug 17-23: only Aug 22 was completed of six elapsed days.
+    expect(report.completionRates.d7).toMatchObject({ completed: 1, expected: 6 });
+    expect(report.completionRates.d7.rate).toBeCloseTo(1 / 6);
     expect(report.streaks.current).toBeGreaterThanOrEqual(1);
     expect(report.risk).toHaveProperty('score');
     expect(report.momentum).toHaveProperty('level');
