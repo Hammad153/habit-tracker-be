@@ -112,7 +112,14 @@ function makeLedgerTx(options?: { completedDates?: string[]; frozenDates?: strin
       state.entries.filter((e) => e.type === type).map((e) => e.idempotencyKey ?? e.id),
     ).size;
 
-  return { tx, state, ledgerSum, expectConserved, liveEntriesOfType, uniqueKeysOfType };
+  return {
+    tx: tx as unknown as Prisma.TransactionClient,
+    state,
+    ledgerSum,
+    expectConserved,
+    liveEntriesOfType,
+    uniqueKeysOfType,
+  };
 }
 
 const ctx = (
