@@ -65,9 +65,10 @@ describe('weekly facts engine — deterministic aggregation', () => {
     const a = entry('A', run(TODAY, 30));
     const b = entry('B', run('2026-08-16', 20)); // nothing in the review week
     const facts = buildWeeklyReviewFacts(WEEK, [a, b], []);
-    // A expected 7 completed 7 ; B expected 7 completed 0 → overall 0.5.
-    expect(facts.overall.completionRate).toBeCloseTo(0.5);
-    expect(facts.overall.expectedCount).toBe(14);
+    // A: 7/7 (today done); B: 0/6 (its uncompleted today leaves the
+    // denominator per Phase 3.1 semantics) → 7 / 13.
+    expect(facts.overall.completionRate).toBeCloseTo(7 / 13);
+    expect(facts.overall.expectedCount).toBe(13);
     expect(facts.overall.completedCount).toBe(7);
   });
 
