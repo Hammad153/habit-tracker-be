@@ -54,8 +54,7 @@ export const isScheduledOnDate = (
       const anchor =
         habit.startDate instanceof Date
           ? habit.startDate.toISOString().slice(0, 10)
-          : ((habit.startDate as string | null | undefined)?.slice(0, 10) ??
-            '2026-01-01');
+          : (habit.startDate?.slice(0, 10) ?? '2026-01-01');
       if (dateKey < anchor) return false;
       return daysBetweenKeys(anchor, dateKey) % interval === 0;
     }

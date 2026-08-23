@@ -121,7 +121,7 @@ export const buildDaySeries = (
   const startKey =
     habit.startDate instanceof Date
       ? habit.startDate.toISOString().slice(0, 10)
-      : ((habit.startDate as string | null | undefined)?.slice(0, 10) ?? null);
+      : (habit.startDate?.slice(0, 10) ?? null);
 
   const series: DayObservation[] = [];
   for (let i = windowDays - 1; i >= 0; i--) {
