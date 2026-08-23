@@ -27,7 +27,7 @@ afterAll(() => {
 
 function makeDb(options?: {
   coins?: number;
-  habit?: Record<string, unknown> | null;
+  habits?: Array<Record<string, unknown>>;
   completedDate?: boolean;
 }) {
   // Committed database state plus a per-transaction write journal, modelling
@@ -41,19 +41,19 @@ function makeDb(options?: {
     nextId: 1,
   };
 
-  const habitRow =
-    options?.habit === undefined
-      ? {
-          id: 'habit-1',
-          userId: 'user-1',
-          isArchived: false,
-          scheduleType: 'daily',
-          scheduleDays: null,
-          timesPerWeek: null,
-          intervalDays: null,
-          startDate: null,
-        }
-      : options.habit;
+  const DEFAULT_HABIT = {
+    id: 'habit-1',
+    userId: 'user-1',
+    isArchived: false,
+    scheduleType: 'daily',
+    scheduleDays: null,
+    timesPerWeek: null,
+    intervalDays: null,
+    startDate: null,
+  };
+  const habits =
+    options?.habits ??
+    [DEFAULT_HABIT];
 
   interface Journal {
     coinsDelta: number;
@@ -61,8 +61,25 @@ function makeDb(options?: {
     freezes: Array<{ id: string; userId: string; habitId: string; date: string; cost: number }>;
   }
 
+  // Transactions are executed strictly serially through a promise chain,
+  // modelling the strongest isolation outcome: no interleaving can produce a
+  // duplicate freeze or an overdraft. (Postgres additionally enforces this via
+  // the (habitId, date) unique index and row locks on User.coins.)
+  let chain: Promise<unknown> = Promise.resolve();
+
   const db = {
-    $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+    $transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => {
+      const run = chain.then(() => runOne(fn));
+      chain = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    }),
+  };
+
+  async function runOne(fn: (tx: unknown) => Promise<unknown>) {
+    {
       const j: Journal = { coinsDelta: 0, entries: [], freezes: [] };
       const visibleFreeze = (habitId: string, date: string) =>
         state.freezes.find((f) => f.habitId === habitId && f.date === date) ??
@@ -70,7 +87,11 @@ function makeDb(options?: {
         null;
 
       const tx = {
-        habit: { findUnique: jest.fn(() => Promise.resolve(habitRow ? { ...habitRow } : null)) },
+        habit: {
+          findUnique: jest.fn(({ where }: any) =>
+            Promise.resolve(habits.find((h) => h.id === where.id) ?? null),
+          ),
+        },
         completion: {
           findFirst: jest.fn(() =>
             Promise.resolve(options?.completedDate ? { id: 'c-x' } : null),
@@ -113,8 +134,8 @@ function makeDb(options?: {
       state.entries.push(...j.entries);
       state.freezes.push(...j.freezes);
       return result;
-    }),
-  };
+    }
+  }
 
   const ledgerSum = () => state.entries.reduce((s, e) => s + e.amount, 0);
   return { service: new StreakFreezeService(db as any), tx: db, state, ledgerSum };
@@ -180,11 +201,13 @@ describe('StreakFreezeService — purchase & anti-exploit', () => {
 
   it('rejects unscheduled dates with no ledger entry', async () => {
     const h = makeDb({
-      habit: {
-        id: 'habit-1', userId: 'user-1', isArchived: false,
-        scheduleType: 'specific_days', scheduleDays: ['Mon'], timesPerWeek: null,
-        intervalDays: null, startDate: null,
-      },
+      habits: [
+        {
+          id: 'habit-1', userId: 'user-1', isArchived: false,
+          scheduleType: 'specific_days', scheduleDays: ['Mon'], timesPerWeek: null,
+          intervalDays: null, startDate: null,
+        },
+      ],
     });
     await expect(purchase(h.service, { date: '2026-08-21' })).rejects.toThrow(BadRequestException); // a Friday
     expect(h.state.entries).toHaveLength(0);
@@ -197,13 +220,13 @@ describe('StreakFreezeService — purchase & anti-exploit', () => {
   });
 
   it('rejects archived habits with no ledger entry', async () => {
-    const h = makeDb({ habit: { id: 'habit-1', userId: 'user-1', isArchived: true, scheduleType: 'daily', scheduleDays: null, timesPerWeek: null, intervalDays: null, startDate: null } });
+    const h = makeDb({ habits: [{ id: 'habit-1', userId: 'user-1', isArchived: true, scheduleType: 'daily', scheduleDays: null, timesPerWeek: null, intervalDays: null, startDate: null }] });
     await expect(purchase(h.service)).rejects.toThrow(ConflictException);
     expect(h.state.entries).toHaveLength(0);
   });
 
   it('rejects unknown habits with no ledger entry', async () => {
-    const h = makeDb({ habit: null });
+    const h = makeDb({ habits: [] });
     await expect(purchase(h.service)).rejects.toThrow(NotFoundException);
     expect(h.state.entries).toHaveLength(0);
   });
@@ -231,12 +254,11 @@ describe('StreakFreezeService — purchase & anti-exploit', () => {
   });
 
   it('competing freezes on different habits cannot drive coins negative', async () => {
-    const h = makeDb({ coins: 150 });
-    // Two habits, each costing 100 — only one can succeed.
-    const otherHabit = { ...{ id: 'habit-2', userId: 'user-1', isArchived: false, scheduleType: 'daily', scheduleDays: null, timesPerWeek: null, intervalDays: null, startDate: null } };
-    h.tx.habit.findUnique.mockImplementation(({ where }: any) =>
-      Promise.resolve(where.id === 'habit-2' ? otherHabit : { id: 'habit-1', userId: 'user-1', isArchived: false, scheduleType: 'daily', scheduleDays: null, timesPerWeek: null, intervalDays: null, startDate: null }),
-    );
+    const daily = { id: 'habit-1', userId: 'user-1', isArchived: false, scheduleType: 'daily', scheduleDays: null, timesPerWeek: null, intervalDays: null, startDate: null };
+    const h = makeDb({
+      coins: 150,
+      habits: [daily, { ...daily, id: 'habit-2' }],
+    });
 
     const results = await Promise.allSettled([
       purchase(h.service, { habitId: 'habit-1' }),
