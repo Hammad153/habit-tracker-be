@@ -538,8 +538,15 @@ describe('HabitService — reward farming & bundle gating', () => {
     // Re-complete the same day: award runs again, but the engine's
     // idempotency keys guarantee the milestone bonus is not re-paid.
     s.database.completion.findUnique.mockResolvedValue(null);
-    s.rewardEngine.awardForCompletionTx.mockClear();
     await s.service.toggleCompletion('habit-1', 'user-1', DAY_A);
+
+    // Two completions -> two legitimate award calls (one per completion row).
+    // Milestone double-payment is impossible regardless, because the engine's
+    // ledger idempotency keys are keyed per cycle (covered by its own spec).
+    expect(s.rewardEngine.awardForCompletionTx).toHaveBeenCalledTimes(2);
+    expect(s.tx.completion.create).toHaveBeenCalledTimes(2);
+    // And the OFF step reversed exactly once.
+    expect(s.rewardEngine.reverseCompletionRewardsTx).toHaveBeenCalledTimes(1);
 
     // Exactly two award calls total for two completions, and each completion
     // produced exactly one create — no duplicate rows to double-count.
