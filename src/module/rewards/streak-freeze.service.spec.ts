@@ -30,6 +30,10 @@ function makeDb(options?: {
   habit?: Record<string, unknown> | null;
   completedDate?: boolean;
 }) {
+  // Committed database state plus a per-transaction write journal, modelling
+  // Postgres READ COMMITTED + atomic commit/abort: readers see committed rows
+  // plus their own uncommitted writes; an aborted tx discards ONLY its own
+  // journal, never another transaction's committed work.
   const state = {
     coins: options?.coins ?? 1000,
     entries: [] as Array<{ id: string; amount: number; type: string }>,
@@ -51,65 +55,69 @@ function makeDb(options?: {
         }
       : options.habit;
 
-  const tx = {
-    habit: { findUnique: jest.fn(() => Promise.resolve(habitRow ? { ...habitRow } : null)) },
-    completion: {
-      findFirst: jest.fn(() =>
-        Promise.resolve(options?.completedDate ? { id: 'c-x' } : null),
-      ),
-    },
-    streakFreeze: {
-      findUnique: jest.fn(({ where }: any) =>
-        Promise.resolve(
-          state.freezes.find(
-            (f) => f.habitId === where.habitId_date.habitId && f.date === where.habitId_date.date,
-          ) ?? null,
-        ),
-      ),
-      create: jest.fn(({ data }: any) => {
-        if (state.freezes.some((f) => f.habitId === data.habitId && f.date === data.date)) {
-          return Promise.reject(p2002());
-        }
-        const freeze = { id: `freeze-${state.nextId++}`, ...data };
-        state.freezes.push(freeze);
-        return Promise.resolve(freeze);
-      }),
-    },
-    rewardLedger: {
-      create: jest.fn(({ data }: any) => {
-        const entry = { id: `entry-${state.nextId++}`, ...data };
-        state.entries.push(entry);
-        return Promise.resolve(entry);
-      }),
-    },
-    user: {
-      findUnique: jest.fn(() => Promise.resolve({ coins: state.coins })),
-      update: jest.fn(({ data }: any) => {
-        state.coins -= data.coins.decrement;
-        return Promise.resolve({ coins: state.coins });
-      }),
-    },
-  };
+  interface Journal {
+    coinsDelta: number;
+    entries: Array<{ id: string; amount: number; type: string }>;
+    freezes: Array<{ id: string; userId: string; habitId: string; date: string; cost: number }>;
+  }
 
-  // Model real DB atomicity: a rejected transaction rolls back every write
-  // it made (mirrors Postgres aborting the whole tx on constraint violation).
   const db = {
-    $transaction: jest.fn(async (fn: any) => {
-      const coinsBase = state.coins;
-      const entryBase = state.entries.length;
-      const freezeBase = state.freezes.length;
-      try {
-        return await fn(tx);
-      } catch (e) {
-        state.coins = coinsBase;
-        state.entries.length = entryBase;
-        state.freezes.length = freezeBase;
-        throw e;
-      }
+    $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+      const j: Journal = { coinsDelta: 0, entries: [], freezes: [] };
+      const visibleFreeze = (habitId: string, date: string) =>
+        state.freezes.find((f) => f.habitId === habitId && f.date === date) ??
+        j.freezes.find((f) => f.habitId === habitId && f.date === date) ??
+        null;
+
+      const tx = {
+        habit: { findUnique: jest.fn(() => Promise.resolve(habitRow ? { ...habitRow } : null)) },
+        completion: {
+          findFirst: jest.fn(() =>
+            Promise.resolve(options?.completedDate ? { id: 'c-x' } : null),
+          ),
+        },
+        streakFreeze: {
+          findUnique: jest.fn(({ where }: any) =>
+            Promise.resolve(
+              visibleFreeze(where.habitId_date.habitId, where.habitId_date.date),
+            ),
+          ),
+          create: jest.fn(({ data }: any) => {
+            if (visibleFreeze(data.habitId, data.date)) return Promise.reject(p2002());
+            const freeze = { id: `freeze-${state.nextId++}`, ...data };
+            j.freezes.push(freeze);
+            return Promise.resolve(freeze);
+          }),
+        },
+        rewardLedger: {
+          create: jest.fn(({ data }: any) => {
+            const entry = { id: `entry-${state.nextId++}`, ...data };
+            j.entries.push(entry);
+            return Promise.resolve(entry);
+          }),
+        },
+        user: {
+          findUnique: jest.fn(() =>
+            Promise.resolve({ coins: state.coins + j.coinsDelta }),
+          ),
+          update: jest.fn(({ data }: any) => {
+            j.coinsDelta -= data.coins.decrement;
+            return Promise.resolve({ coins: state.coins + j.coinsDelta });
+          }),
+        },
+      };
+
+      const result = await fn(tx);
+      // Commit: merge this transaction's journal into committed state.
+      state.coins += j.coinsDelta;
+      state.entries.push(...j.entries);
+      state.freezes.push(...j.freezes);
+      return result;
     }),
   };
+
   const ledgerSum = () => state.entries.reduce((s, e) => s + e.amount, 0);
-  return { service: new StreakFreezeService(db as any), tx, state, ledgerSum };
+  return { service: new StreakFreezeService(db as any), tx: db, state, ledgerSum };
 }
 
 const purchase = (
