@@ -1,5 +1,5 @@
 import type { WeeklyReviewFacts } from './weekly-facts.utils';
-import type { CoachTonePref } from '../../core/utils/coach-preference.utils';
+
 import { applyToneToFallbackMessage } from '../../core/utils/coach-preference.utils';
 
 /**
@@ -26,7 +26,7 @@ const withArticle = (title: string): string => {
 
 export const buildDeterministicWeeklyReview = (
   facts: WeeklyReviewFacts,
-  tone: CoachTonePref | string,
+  tone: string,
 ): DeterministicReview => {
   if (facts.insufficientHistory || facts.overall.completionRate === null) {
     return {

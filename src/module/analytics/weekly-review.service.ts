@@ -5,6 +5,7 @@ import { WeeklyReviewLanguageDto } from '../../core/ai/providers/nvidia/nvidia.c
 import { parseValidatedJson } from '../../core/ai/structured-output.util';
 import { DatabaseService } from '../../core/database/database.service';
 import {
+  localDateKeyInZone,
   resolveWeeklyAnalysisDate,
   WeekRange,
   WeeklyDateError,
@@ -78,7 +79,10 @@ export class WeeklyReviewService {
       where: { id: userId },
       select: { timezone: true },
     });
-    const { todayKey, range } = this.resolveRangeOrThrow(weekParam, user?.timezone);
+    // Real "now" in the user's zone decides week lifecycle; the ?week= param
+    // only SELECTS which week to look at.
+    const realToday = localDateKeyInZone(user?.timezone ?? null);
+    const { range } = this.resolveRangeOrThrow(weekParam, user?.timezone);
 
     if (!prefs.weeklyReviewEnabled) {
       return {
@@ -90,8 +94,9 @@ export class WeeklyReviewService {
       };
     }
 
-    const isComplete = range.end < todayKey;
-    if (!isComplete && !(todayKey >= range.start && todayKey <= range.end)) {
+    const isComplete = range.end < realToday;
+    const isCurrent = realToday >= range.start && realToday <= range.end;
+    if (!isComplete && !isCurrent) {
       throw new BadRequestException('week must not be in the future');
     }
 
@@ -112,6 +117,8 @@ export class WeeklyReviewService {
       range,
       isComplete,
       prefs.coachTone,
+      // Live weeks render deterministically — no AI spend on a moving target.
+      isComplete && prefs.aiCoachEnabled !== false,
     ).finally(() => this.inFlight.delete(cacheKey));
     this.inFlight.set(cacheKey, job);
     return job;
@@ -126,8 +133,9 @@ export class WeeklyReviewService {
       where: { id: userId },
       select: { timezone: true },
     });
-    const { todayKey, range } = this.resolveRangeOrThrow(weekParam, user?.timezone);
-    if (!(range.end < todayKey)) {
+    const realToday = localDateKeyInZone(user?.timezone ?? null);
+    const { range } = this.resolveRangeOrThrow(weekParam, user?.timezone);
+    if (!(range.end < realToday)) {
       throw new BadRequestException('only completed weeks can be regenerated');
     }
     const prefs = await this.loadPreferences(userId);
@@ -137,7 +145,13 @@ export class WeeklyReviewService {
     await this.databaseSvc.weeklyBehaviorReview.deleteMany({
       where: { userId, weekStart: range.start },
     });
-    return this.generateAndPersist(userId, range, true, prefs.coachTone);
+    return this.generateAndPersist(
+      userId,
+      range,
+      true,
+      prefs.coachTone,
+      prefs.aiCoachEnabled === true,
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -147,11 +161,12 @@ export class WeeklyReviewService {
     range: WeekRange,
     isComplete: boolean,
     prefTone: string,
+    allowAi: boolean,
   ): Promise<WeeklyReviewResponse> {
     const facts = await this.buildFacts(userId, range);
 
     let language: WeeklyReviewView | null = null;
-    if (this.aiProvider.model && !facts.insufficientHistory) {
+    if (allowAi && this.aiProvider.model && !facts.insufficientHistory) {
       language = await this.generateLanguageWithRetry(facts, prefTone, range.start);
     } else if (facts.insufficientHistory) {
       this.logger.log({
@@ -262,7 +277,7 @@ export class WeeklyReviewService {
         .sort((a, b) => b.evidencePoints - a.evidencePoints)
         .slice(0, 3)
         .map((i) => ({
-          name: String(i.title ?? ''),
+          name: typeof i.title === 'string' ? i.title : '',
           evidencePoints: Number(i.evidencePoints ?? 0),
           levelTitle: String(i.levelTitle ?? ''),
         }));
