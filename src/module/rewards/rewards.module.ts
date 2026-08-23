@@ -7,6 +7,7 @@ import { TemptationBundleService } from './temptation-bundle.service';
 import { TemptationBundleController } from './temptation-bundle.controller';
 import { RewardShopService } from './reward-shop.service';
 import { RewardShopController } from './reward-shop.controller';
+import { DatabaseService } from '../../core/database/database.service';
 
 @Global()
 @Module({
@@ -21,6 +22,7 @@ import { RewardShopController } from './reward-shop.controller';
     StreakFreezeService,
     TemptationBundleService,
     RewardShopService,
+    DatabaseService
   ],
   exports: [
     RewardsService,

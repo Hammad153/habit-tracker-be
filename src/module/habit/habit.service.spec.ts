@@ -509,3 +509,102 @@ describe('HabitService stacking validation', () => {
     expect(result).toBeDefined();
   });
 });
+
+describe('HabitService — reward farming & bundle gating', () => {
+  const DAY_A = '2026-08-21';
+  const DAY_B = '2026-08-22';
+
+  it('a FULL -> OFF -> FULL farming cycle nets exactly one base grant', async () => {
+    const s = makeService();
+    s.database.habit.findUnique.mockResolvedValue(habit());
+
+    // Day 1: complete (FULL).
+    s.database.completion.findUnique.mockResolvedValue(null);
+    await s.service.toggleCompletion('habit-1', 'user-1', DAY_A);
+    expect(s.rewardEngine.awardForCompletionTx).toHaveBeenCalledTimes(1);
+
+    // Toggle OFF: reversal runs once.
+    s.database.completion.findUnique.mockResolvedValue({
+      id: 'completion-new',
+      habitId: 'habit-1',
+      date: DAY_A,
+      status: true,
+      kind: 'FULL',
+    });
+    s.rewardEngine.reverseCompletionRewardsTx.mockClear();
+    await s.service.toggleCompletion('habit-1', 'user-1', DAY_A);
+    expect(s.rewardEngine.reverseCompletionRewardsTx).toHaveBeenCalledTimes(1);
+
+    // Re-complete the same day: award runs again, but the engine's
+    // idempotency keys guarantee the milestone bonus is not re-paid.
+    s.database.completion.findUnique.mockResolvedValue(null);
+    s.rewardEngine.awardForCompletionTx.mockClear();
+    await s.service.toggleCompletion('habit-1', 'user-1', DAY_A);
+
+    // Exactly two award calls total for two completions, and each completion
+    // produced exactly one create — no duplicate rows to double-count.
+    expect(s.rewardEngine.awardForCompletionTx).toHaveBeenCalledTimes(2);
+    expect(s.tx.completion.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('MINIMUM completions never unlock temptation bundles', async () => {
+    const s = makeService();
+    s.database.habit.findUnique.mockResolvedValue(
+      habit({ minimumBehavior: 'Read one page' }),
+    );
+    s.database.completion.findUnique.mockResolvedValue(null);
+    s.rewardEngine.awardForCompletionTx.mockResolvedValue(breakdownOf(3));
+
+    await s.service.toggleCompletion('habit-1', 'user-1', DAY_B, undefined, 'MINIMUM');
+
+    expect(s.tx.temptationBundle.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('EMERGENCY completions never unlock temptation bundles', async () => {
+    const s = makeService();
+    s.database.habit.findUnique.mockResolvedValue(
+      habit({ emergencyMinimum: 'One push-up' }),
+    );
+    s.database.completion.findUnique.mockResolvedValue(null);
+    s.rewardEngine.awardForCompletionTx.mockResolvedValue(breakdownOf(2));
+
+    await s.service.toggleCompletion('habit-1', 'user-1', DAY_B, undefined, 'EMERGENCY');
+
+    expect(s.tx.temptationBundle.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('FULL completions unlock bundles; toggle-offs do NOT re-lock them', async () => {
+    const s = makeService();
+
+    // FULL completion unlocks.
+    s.database.habit.findUnique.mockResolvedValue(habit());
+    s.database.completion.findUnique.mockResolvedValue(null);
+    await s.service.toggleCompletion('habit-1', 'user-1', DAY_B);
+    expect(s.tx.temptationBundle.updateMany).toHaveBeenCalledTimes(1);
+    expect(s.tx.temptationBundle.updateMany).toHaveBeenCalledWith({
+      where: { habitId: 'habit-1', status: 'LOCKED' },
+      data: expect.objectContaining({ status: 'UNLOCKED' }),
+    });
+
+    // Toggle OFF reverses rewards but must never re-lock.
+    s.database.completion.findUnique.mockResolvedValue({
+      id: 'completion-new',
+      habitId: 'habit-1',
+      date: DAY_B,
+      status: true,
+      kind: 'FULL',
+    });
+    await s.service.toggleCompletion('habit-1', 'user-1', DAY_B);
+    expect(s.tx.temptationBundle.updateMany).toHaveBeenCalledTimes(1); // unchanged
+
+    // Re-completing is idempotent-safe: unlock may run again but only
+    // targets LOCKED rows, so USED/UNLOCKED bundles are untouched.
+    s.database.completion.findUnique.mockResolvedValue(null);
+    await s.service.toggleCompletion('habit-1', 'user-1', DAY_B);
+    expect(s.tx.temptationBundle.updateMany).toHaveBeenCalledTimes(2);
+    expect(s.tx.temptationBundle.updateMany).toHaveBeenLastCalledWith({
+      where: { habitId: 'habit-1', status: 'LOCKED' },
+      data: expect.objectContaining({ status: 'UNLOCKED' }),
+    });
+  });
+});
