@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../core/database/database.service';
+import { UpdateCoachPreferencesDto } from './dto/coach-preferences.dto';
 import * as bcrypt from 'bcryptjs';
 import { SALT_ROUND } from '../../constants';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -21,6 +22,46 @@ type Tx = Prisma.TransactionClient;
 @Injectable()
 export class ProfileService {
   constructor(private databaseSvc: DatabaseService) {}
+
+  /** Phase 3.4 — persistent AI/coach preferences. */
+  public async getCoachPreferences(userId: string) {
+    const user = await this.databaseSvc.user.findUnique({
+      where: { id: userId },
+      select: {
+        coachEnabled: true,
+        aiCoachEnabled: true,
+        coachTone: true,
+        coachFrequency: true,
+        weeklyReviewEnabled: true,
+      },
+    });
+    return (
+      user ?? {
+        coachEnabled: true,
+        aiCoachEnabled: true,
+        coachTone: 'BALANCED',
+        coachFrequency: 'STANDARD',
+        weeklyReviewEnabled: true,
+      }
+    );
+  }
+
+  public async updateCoachPreferences(
+    userId: string,
+    dto: UpdateCoachPreferencesDto,
+  ) {
+    await this.databaseSvc.user.update({
+      where: { id: userId },
+      data: {
+        coachEnabled: dto.coachEnabled,
+        aiCoachEnabled: dto.aiCoachEnabled,
+        coachTone: dto.coachTone,
+        coachFrequency: dto.coachFrequency,
+        weeklyReviewEnabled: dto.weeklyReviewEnabled,
+      },
+    });
+    return this.getCoachPreferences(userId);
+  }
 
   public async getProfile(userId: string) {
     const user = await this.databaseSvc.user.findUnique({

@@ -82,44 +82,75 @@ enum RewardItemStatus {
 }
 
 model User {
-  id             String      @id @default(cuid())
-  name           String
-  email          String      @unique
-  password       String
-  refreshToken   String?
-  resetToken     String?
-  resetTokenExpiry DateTime?
-  avatar         String?
-  pushToken      String?
+  id                  String                  @id @default(cuid())
+  name                String
+  email               String                  @unique
+  password            String
+  refreshToken        String?
+  resetToken          String?
+  resetTokenExpiry    DateTime?
+  avatar              String?
+  pushToken           String?
   // IANA timezone (e.g. "Asia/Karachi") used ONLY for behavioral analytics
   // (time-of-day windows). Historical completion dates are never reinterpreted.
-  timezone       String?
-  level          Int         @default(1)
-  xp             Int         @default(0)
+  timezone            String?
+  // Phase 3.4 — persistent coach preferences (safe defaults for existing users).
+  coachEnabled        Boolean                 @default(true)
+  aiCoachEnabled      Boolean                 @default(true)
+  coachTone           String                  @default("BALANCED") // ENCOURAGING|DIRECT|CALM|CHALLENGING|BALANCED
+  coachFrequency      String                  @default("STANDARD") // MINIMAL|STANDARD|FREQUENT
+  weeklyReviewEnabled Boolean                 @default(true)
+  level               Int                     @default(1)
+  xp                  Int                     @default(0)
   // Cached virtual-currency balance. The RewardLedger is the source of truth;
   // this value must only change together with a ledger entry (same transaction).
-  coins          Int         @default(0)
-  longestStreak  Int         @default(0)
-  totalHabits    Int         @default(0)
-  completionRate Float       @default(0)
-  habits         Habit[]
-  badges         UserBadge[]
-  reminders      Reminder[]
-  budgets        Budget[]
-  expenses       Expense[]
-  incomes        Income[]
-  expenseCategories ExpenseCategory[]
-  dailyPlans     DailyPlan[]
-  dailyPlanTasks DailyPlanTask[]
-  journalEntries JournalEntry[]
-  identities     Identity[]
-  rewardLedger   RewardLedger[]
-  temptationBundles TemptationBundle[]
-  streakFreezes  StreakFreeze[]
-  rewardAllocations HabitRewardAllocation[]
-  rewardRedemptions RewardRedemption[]
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  coins               Int                     @default(0)
+  longestStreak       Int                     @default(0)
+  totalHabits         Int                     @default(0)
+  completionRate      Float                   @default(0)
+  habits              Habit[]
+  badges              UserBadge[]
+  reminders           Reminder[]
+  budgets             Budget[]
+  expenses            Expense[]
+  incomes             Income[]
+  expenseCategories   ExpenseCategory[]
+  dailyPlans          DailyPlan[]
+  dailyPlanTasks      DailyPlanTask[]
+  journalEntries      JournalEntry[]
+  identities          Identity[]
+  rewardLedger        RewardLedger[]
+  temptationBundles   TemptationBundle[]
+  streakFreezes       StreakFreeze[]
+  rewardAllocations   HabitRewardAllocation[]
+  rewardRedemptions   RewardRedemption[]
+  weeklyReviews       WeeklyBehaviorReview[]
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+}
+
+/// Phase 3.4 — one persisted behavioral review per user per ISO week (Mon-based).
+model WeeklyBehaviorReview {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekStart          String // YYYY-MM-DD (Monday, user-local day key)
+  weekEnd            String // YYYY-MM-DD (Sunday)
+  status             String   @default("READY") // READY | PENDING
+  provider           String   @default("fallback")
+  generated          Boolean  @default(false)
+  model              String?
+  headline           String
+  summary            String
+  wins               Json     @default("[]")
+  patterns           Json     @default("[]")
+  identityReflection String   @default("")
+  nextWeekFocus      Json     @default("[]")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([userId, weekStart])
+  @@index([userId, updatedAt])
 }
 
 enum JournalMood {
@@ -133,10 +164,10 @@ enum JournalMood {
 }
 
 model JournalEntry {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title  String
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
   // A calendar day (`YYYY-MM-DD`), not an instant. Stored as text so it round
   // trips exactly: the client groups and filters entries by this value, and a
   // DateTime would come back with a time component and a timezone to shift it.
@@ -155,75 +186,75 @@ model JournalEntry {
 }
 
 model Habit {
-  id          String       @id @default(cuid())
-  userId      String
-  user        User         @relation(fields: [userId], references: [id])
-  title       String
-  subtitle    String?
-  icon        String
-  iconColor   String
-  iconBg      String
-  category    String?
-  frequency   String?      // e.g., "Daily", "Weekdays" (legacy)
-  scheduleType String?     // "daily" | "specific_days" | "times_per_week" | "interval"
-  scheduleDays String[]    @default([]) // e.g., ["Mon", "Wed", "Fri"]
-  timesPerWeek Int?        // used when scheduleType = "times_per_week"
-  intervalDays Int?        // used when scheduleType = "interval"
-  priority    String?      // e.g., "High", "Medium", "Low"
-  goal        Float        @default(1) // Target value (e.g., 30 pushups)
-  unit        String?      @default("times") // Unit (e.g., reps, pages)
+  id                   String                  @id @default(cuid())
+  userId               String
+  user                 User                    @relation(fields: [userId], references: [id])
+  title                String
+  subtitle             String?
+  icon                 String
+  iconColor            String
+  iconBg               String
+  category             String?
+  frequency            String? // e.g., "Daily", "Weekdays" (legacy)
+  scheduleType         String? // "daily" | "specific_days" | "times_per_week" | "interval"
+  scheduleDays         String[]                @default([]) // e.g., ["Mon", "Wed", "Fri"]
+  timesPerWeek         Int? // used when scheduleType = "times_per_week"
+  intervalDays         Int? // used when scheduleType = "interval"
+  priority             String? // e.g., "High", "Medium", "Low"
+  goal                 Float                   @default(1) // Target value (e.g., 30 pushups)
+  unit                 String?                 @default("times") // Unit (e.g., reps, pages)
   // Implementation intention: "I will [BEHAVIOR] at [TIME] in [LOCATION]."
-  scheduledTime String?    // Local HH:mm (e.g., "20:00")
-  location      String?
+  scheduledTime        String? // Local HH:mm (e.g., "20:00")
+  location             String?
   // Behavioral versions of the habit.
-  fullBehavior     String? // The normal target, described behaviorally
-  minimumBehavior  String? // The 2-minute version that preserves consistency
-  emergencyMinimum String? // Reduced version used on very hard days
+  fullBehavior         String? // The normal target, described behaviorally
+  minimumBehavior      String? // The 2-minute version that preserves consistency
+  emergencyMinimum     String? // Reduced version used on very hard days
   // Habit stacking: "After I [stackAfter], I will [this habit]."
-  stackAfterHabitId String?
-  stackAfter       Habit?  @relation("HabitStack", fields: [stackAfterHabitId], references: [id], onDelete: SetNull)
-  stackedBy        Habit[] @relation("HabitStack")
+  stackAfterHabitId    String?
+  stackAfter           Habit?                  @relation("HabitStack", fields: [stackAfterHabitId], references: [id], onDelete: SetNull)
+  stackedBy            Habit[]                 @relation("HabitStack")
   // Per-habit reward rule overrides. Null = engine default for that kind.
-  fullCoins        Int?
-  minimumCoins     Int?
-  emergencyCoins   Int?
-  streakBonusEnabled   Boolean @default(true)
-  identityBonusEnabled Boolean @default(true)
+  fullCoins            Int?
+  minimumCoins         Int?
+  emergencyCoins       Int?
+  streakBonusEnabled   Boolean                 @default(true)
+  identityBonusEnabled Boolean                 @default(true)
   // Virtual Reward Fund: naira allocated to the user's reward fund on every
   // FULL completion. Null disables funding for this habit. Never real money.
-  rewardFundAmount Float?
-  isArchived  Boolean      @default(false)
-  startDate   DateTime?    // Optional start date for temporary habits
-  endDate     DateTime?    // Optional end date - habit will be auto-deleted after this date
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  completions Completion[]
-  reminders   Reminder[]
-  dailyPlanTasks DailyPlanTask[]
-  identityLinks IdentityHabit[]
-  temptationBundles TemptationBundle[]
-  streakFreezes StreakFreeze[]
-  rewardAllocations HabitRewardAllocation[]
+  rewardFundAmount     Float?
+  isArchived           Boolean                 @default(false)
+  startDate            DateTime? // Optional start date for temporary habits
+  endDate              DateTime? // Optional end date - habit will be auto-deleted after this date
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  completions          Completion[]
+  reminders            Reminder[]
+  dailyPlanTasks       DailyPlanTask[]
+  identityLinks        IdentityHabit[]
+  temptationBundles    TemptationBundle[]
+  streakFreezes        StreakFreeze[]
+  rewardAllocations    HabitRewardAllocation[]
 }
 
 model Budget {
-  id        String           @id @default(cuid())
-  userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  amount    Float
-  note      String?
-  periodType BudgetPeriodType @default(MONTHLY)
-  startDate DateTime
-  endDate   DateTime
-  expenses  Expense[]
+  id          String                     @id @default(cuid())
+  userId      String
+  user        User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  amount      Float
+  note        String?
+  periodType  BudgetPeriodType           @default(MONTHLY)
+  startDate   DateTime
+  endDate     DateTime
+  expenses    Expense[]
   // Per-week rows for WEEKLY budgets. `amount` above stays the source of truth
   // for totals and is kept equal to the sum of these rows.
-  breakdowns BudgetBreakdown[]
+  breakdowns  BudgetBreakdown[]
   // Optional per-category planning for MONTHLY / CUSTOM budgets.
   allocations BudgetCategoryAllocation[]
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
 
   @@index([userId, startDate, endDate])
   @@index([userId, periodType, startDate, endDate])
@@ -233,7 +264,7 @@ model BudgetBreakdown {
   id        String   @id @default(cuid())
   budgetId  String
   budget    Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
-  label     String   // e.g. "Week 1"
+  label     String // e.g. "Week 1"
   startDate DateTime
   endDate   DateTime
   amount    Float
@@ -260,17 +291,17 @@ model BudgetCategoryAllocation {
 }
 
 model ExpenseCategory {
-  id        String    @id @default(cuid())
-  userId    String?
-  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
-  icon      String?
-  color     String?
-  isDefault Boolean   @default(false)
-  expenses  Expense[]
+  id          String                     @id @default(cuid())
+  userId      String?
+  user        User?                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  icon        String?
+  color       String?
+  isDefault   Boolean                    @default(false)
+  expenses    Expense[]
   allocations BudgetCategoryAllocation[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
 
   @@unique([userId, name])
   @@index([isDefault])
@@ -327,24 +358,24 @@ model DailyPlan {
 }
 
 model DailyPlanTask {
-  id          String              @id @default(cuid())
-  userId      String
-  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dailyPlanId String
-  dailyPlan   DailyPlan           @relation(fields: [dailyPlanId], references: [id], onDelete: Cascade)
-  habitId     String?
-  habit       Habit?              @relation(fields: [habitId], references: [id], onDelete: SetNull)
-  title       String
-  description String?
-  priority    DailyPlanTaskPriority @default(MEDIUM)
-  status      DailyPlanTaskStatus   @default(PENDING)
-  startTime   String?
-  endTime     String?
+  id              String                @id @default(cuid())
+  userId          String
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyPlanId     String
+  dailyPlan       DailyPlan             @relation(fields: [dailyPlanId], references: [id], onDelete: Cascade)
+  habitId         String?
+  habit           Habit?                @relation(fields: [habitId], references: [id], onDelete: SetNull)
+  title           String
+  description     String?
+  priority        DailyPlanTaskPriority @default(MEDIUM)
+  status          DailyPlanTaskStatus   @default(PENDING)
+  startTime       String?
+  endTime         String?
   durationMinutes Int?
-  completedAt DateTime?
-  sortOrder   Int                 @default(0)
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  completedAt     DateTime?
+  sortOrder       Int                   @default(0)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   @@index([userId])
   @@index([dailyPlanId, sortOrder])
@@ -356,7 +387,7 @@ model Reminder {
   id        String   @id @default(cuid())
   userId    String
   habitId   String
-  time      String   // Format: HH:mm (e.g., "08:00")
+  time      String // Format: HH:mm (e.g., "08:00")
   days      String[] // e.g., ["Mon", "Tue", "Wed", "Thu", "Fri"]
   enabled   Boolean  @default(true)
   user      User     @relation(fields: [userId], references: [id])
@@ -368,37 +399,37 @@ model Reminder {
 }
 
 model Completion {
-  id      String   @id @default(cuid())
-  habitId String
-  date    String   // Format: YYYY-MM-DD
-  status  Boolean  @default(true)
-  value   Float    @default(1) // Actual progress value
+  id                String            @id @default(cuid())
+  habitId           String
+  date              String // Format: YYYY-MM-DD
+  status            Boolean           @default(true)
+  value             Float             @default(1) // Actual progress value
   // How the habit was completed. Existing rows are FULL (historical truth);
   // MINIMUM/EMERGENCY record reduced-effort successes without erasing history.
-  kind    CompletionKind @default(FULL)
-  source  CompletionSource?
+  kind              CompletionKind    @default(FULL)
+  source            CompletionSource?
   sourceReferenceId String?
   // Wall-clock instant the row was created (Phase 3+). Older rows have the
   // migration timestamp and carry no reliable time-of-day signal.
-  createdAt DateTime @default(now())
-  habit   Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  createdAt         DateTime          @default(now())
+  habit             Habit             @relation(fields: [habitId], references: [id], onDelete: Cascade)
 
   @@unique([habitId, date])
   @@index([source, sourceReferenceId])
 }
 
 model Identity {
-  id          String         @id @default(cuid())
+  id          String          @id @default(cuid())
   userId      String
-  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   title       String
   description String?
   icon        String?
   color       String?
-  status      IdentityStatus @default(ACTIVE)
+  status      IdentityStatus  @default(ACTIVE)
   habitLinks  IdentityHabit[]
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   @@index([userId, status])
 }
@@ -416,13 +447,13 @@ model IdentityHabit {
 }
 
 model RewardLedger {
-  id            String                @id @default(cuid())
-  userId        String
-  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amount        Int                   // Positive earns coins, negative spends/reverses
-  type          RewardTransactionType
-  referenceType String?               // e.g. "COMPLETION", "LEDGER_ENTRY"
-  referenceId   String?
+  id             String                @id @default(cuid())
+  userId         String
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount         Int // Positive earns coins, negative spends/reverses
+  type           RewardTransactionType
+  referenceType  String? // e.g. "COMPLETION", "LEDGER_ENTRY"
+  referenceId    String?
   // Deterministic dedupe key for milestone-style awards (e.g.
   // "sm:<habitId>:<milestone>:<cycleStart>", "im:<identityId>:<threshold>").
   // A repeated claim hits the unique index and is a no-op, which keeps
@@ -430,11 +461,11 @@ model RewardLedger {
   idempotencyKey String?
   // Set when this entry reverses another ledger entry. Unique: an entry can
   // only be reversed once, which makes reversals idempotent.
-  reversalOfId  String?
-  reversalOf    RewardLedger?         @relation("Reversals", fields: [reversalOfId], references: [id], onDelete: SetNull)
-  reversedBy    RewardLedger[]        @relation("Reversals")
-  description   String?
-  createdAt     DateTime              @default(now())
+  reversalOfId   String?
+  reversalOf     RewardLedger?         @relation("Reversals", fields: [reversalOfId], references: [id], onDelete: SetNull)
+  reversedBy     RewardLedger[]        @relation("Reversals")
+  description    String?
+  createdAt      DateTime              @default(now())
 
   // NOTE: awards are intentionally NOT unique per (type, referenceId): one
   // completion may legitimately be awarded more than once across same-day
@@ -448,18 +479,18 @@ model RewardLedger {
 }
 
 model TemptationBundle {
-  id          String                @id @default(cuid())
+  id          String                 @id @default(cuid())
   userId      String
-  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   habitId     String
-  habit       Habit                 @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  habit       Habit                  @relation(fields: [habitId], references: [id], onDelete: Cascade)
   title       String
   description String?
   status      TemptationBundleStatus @default(LOCKED)
   unlockedAt  DateTime?
   usedAt      DateTime?
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
 
   @@index([userId, status])
   @@index([habitId])
@@ -471,7 +502,7 @@ model StreakFreeze {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   habitId   String
   habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
-  date      String   // Protected occurrence day key (YYYY-MM-DD)
+  date      String // Protected occurrence day key (YYYY-MM-DD)
   cost      Int
   createdAt DateTime @default(now())
 
@@ -495,16 +526,16 @@ model HabitRewardAllocation {
 }
 
 model RewardItem {
-  id          String          @id @default(cuid())
-  key         String          @unique
+  id          String             @id @default(cuid())
+  key         String             @unique
   name        String
   description String?
   cost        Int
   type        RewardItemType
-  status      RewardItemStatus @default(ACTIVE)
+  status      RewardItemStatus   @default(ACTIVE)
   redemptions RewardRedemption[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 }
 
 model RewardRedemption {
@@ -513,7 +544,7 @@ model RewardRedemption {
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   itemId    String
   item      RewardItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  cost      Int        // Snapshot of the item cost at redemption time
+  cost      Int // Snapshot of the item cost at redemption time
   createdAt DateTime   @default(now())
 
   // Items are permanent unlocks: one redemption per user per item.

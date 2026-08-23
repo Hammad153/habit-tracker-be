@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ProfileService } from './profile.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateCoachPreferencesDto } from './dto/coach-preferences.dto';
 import { CurrentUser } from '../../core/decorators/current-user.decorator';
 
 @ApiTags('Profile')
@@ -25,6 +26,21 @@ export class ProfileController {
     @CurrentUser() userId: string,
   ) {
     return this.profileService.updateProfile(userId, updateProfileDto);
+  }
+
+  /** Phase 3.4 — persistent AI/coach preferences. */
+  @Get('coach-preferences')
+  getCoachPreferences(@CurrentUser() userId: string) {
+    return this.profileService.getCoachPreferences(userId);
+  }
+
+  @Patch('coach-preferences')
+  updateCoachPreferences(
+    @CurrentUser() userId: string,
+    @Body() dto: UpdateCoachPreferencesDto,
+  ) {
+    // Never accepts a userId from the client — always the authenticated user.
+    return this.profileService.updateCoachPreferences(userId, dto);
   }
 
   @Post('change-password')

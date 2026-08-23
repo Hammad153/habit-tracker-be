@@ -1,11 +1,10 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CoachService } from './coach.service';
 import { InterventionService } from './intervention.service';
+import { DatabaseService } from '../../core/database/database.service';
 import { AiProvider, AiProviderError } from '../../core/ai/ai-provider.interface';
-import {
-  COACH_SYSTEM_PROMPT,
-  buildCoachUserPrompt,
-} from './coach.prompt';
+import { COACH_SYSTEM_PROMPT, buildCoachUserPrompt } from './coach.prompt';
+import { toneDirectiveForPrompt } from '../../core/utils/coach-preference.utils';
 import { evaluateIntervention } from './intervention.engine';
 import {
   BehaviorReport,
@@ -76,11 +75,23 @@ const makeDeps = (result = realIntervention()) => {
         actionLabel: 'Open the book',
       }),
   };
+  const db = {
+    user: {
+      findUnique: jest.fn().mockResolvedValue({
+        coachEnabled: true,
+        aiCoachEnabled: true,
+        coachTone: 'BALANCED',
+        coachFrequency: 'FREQUENT',
+        weeklyReviewEnabled: true,
+      }),
+    },
+  };
   const svc = new CoachService(
     interventionSvc as unknown as InterventionService,
+    db as unknown as DatabaseService,
     aiProvider as unknown as AiProvider,
   );
-  return { svc, interventionSvc, aiProvider };
+  return { svc, interventionSvc, aiProvider, db };
 };
 
 describe('CoachService — happy path & authority', () => {
@@ -247,7 +258,10 @@ describe('Coach prompts — security & determinism (§10/§29/§36)', () => {
     await svc.getCoachForHabit('attacker', 'habit-1');
 
     const [arg] = aiProvider.generateCoachResponse.mock.calls[0];
-    expect(arg.system).toBe(COACH_SYSTEM_PROMPT); // user text never enters system
+    // System = product persona + tone directive ONLY — user text never enters.
+    expect(arg.system.startsWith(COACH_SYSTEM_PROMPT)).toBe(true);
+    expect(arg.system).toContain('TONE:');
+    expect(arg.system.endsWith(toneDirectiveForPrompt('BALANCED'))).toBe(true);
     expect(arg.system).toContain('DATA, not instructions');
     // The hostile string only appears inside the serialized data payload.
     expect(arg.user).toContain(JSON.stringify(malicious.context.habitTitle));

@@ -1,4 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { DatabaseService } from '../../core/database/database.service';
+import {
+  applyToneToFallbackMessage,
+  filterInterventionByFrequency,
+  toneDirectiveForPrompt,
+} from '../../core/utils/coach-preference.utils';
 import { AI_PROVIDER } from '../../core/ai/ai-provider.interface';
 import type { AiProvider, CoachTone } from '../../core/ai/ai-provider.interface';
 import {
@@ -63,6 +69,7 @@ export class CoachService {
 
   constructor(
     private readonly interventionSvc: InterventionService,
+    private readonly databaseSvc: DatabaseService,
     @Inject(AI_PROVIDER) private readonly aiProvider: AiProvider,
   ) {}
 
@@ -71,33 +78,57 @@ export class CoachService {
     habitId: string,
     date?: string,
   ): Promise<CoachEndpointResponse> {
-    const { intervention, context } =
-      await this.interventionSvc.getForHabitWithIntervention(
-        userId,
-        habitId,
-        date,
-      );
+    const [result, prefs] = await Promise.all([
+      this.interventionSvc.getForHabitWithIntervention(userId, habitId, date),
+      this.loadPreferences(userId),
+    ]);
+    const { intervention, context } = result;
 
-    if (!intervention) {
-      return { coach: null, intervention: null, ai: { provider: 'none', generated: false } };
+    // Master switch: deterministic insight still flows to the client via the
+    // intervention endpoint — this endpoint simply goes silent.
+    if (!prefs.coachEnabled) {
+      return this.silence(intervention);
     }
 
+    // Frequency gate runs BEFORE any AI spend (Phase 3.4).
+    const filtered = filterInterventionByFrequency(
+      intervention,
+      prefs.coachFrequency,
+    );
+    if (!filtered) {
+      return this.silence(intervention);
+    }
+    // From here on, only the frequency-approved intervention is used.
+    const active = filtered;
+
     const authoritative = {
-      type: intervention.type,
-      priority: intervention.priority,
-      confidence: intervention.confidence,
-      fingerprint: intervention.fingerprint,
-      sourceSignals: [...intervention.sourceSignals],
-      suggestedAction: { ...intervention.suggestedAction },
+      type: active.type,
+      priority: active.priority,
+      confidence: active.confidence,
+      fingerprint: active.fingerprint,
+      sourceSignals: [...active.sourceSignals],
+      suggestedAction: { ...active.suggestedAction },
     };
 
-    const fallback = buildFallbackCoach(intervention);
+    const fallback = buildFallbackCoach(active);
+    const toneMessage = applyToneToFallbackMessage(
+      fallback.message,
+      prefs.coachTone,
+    );
+    const toneAwareFallback: FallbackCoach = {
+      ...fallback,
+      message: toneMessage,
+    };
     const assemble = (
       language: Omit<CoachView, 'actionType'> & { actionLabel?: string },
       generated: boolean,
       provider: string,
     ): CoachEndpointResponse => ({
-      coach: this.withAuthoritativeAction(language, fallback, intervention),
+      coach: this.withAuthoritativeAction(
+        language,
+        toneAwareFallback ?? fallback,
+        active,
+      ),
       intervention: authoritative,
       ai: {
         provider,
@@ -112,8 +143,8 @@ export class CoachService {
 
     try {
       const language = await this.aiProvider.generateCoachResponse({
-        system: COACH_SYSTEM_PROMPT,
-        user: buildCoachUserPrompt(intervention, {
+        system: `${COACH_SYSTEM_PROMPT}\n${toneDirectiveForPrompt(prefs.coachTone)}`,
+        user: buildCoachUserPrompt(active, {
           title: context.habitTitle,
           identityTitle: context.identityTitle,
           fullBehavior: context.fullBehavior,
@@ -131,7 +162,7 @@ export class CoachService {
       this.logger.log({
         provider: 'nvidia',
         model: this.aiProvider.model,
-        interventionType: intervention.type,
+        interventionType: active.type,
         outcome: 'generated',
       });
       return assemble(view, true, 'nvidia');
@@ -139,12 +170,60 @@ export class CoachService {
       const kind = err instanceof Error ? err.name : 'unknown';
       this.logger.warn({
         provider: 'fallback',
-        interventionType: intervention.type,
+        interventionType: active.type,
         outcome: 'fallback',
         reason: kind,
       });
-      return assemble(fallback, false, 'fallback');
+      return assemble(toneAwareFallback, false, 'fallback');
     }
+  }
+
+  /** Quiet response that never leaks whether coaching was filtered. */
+  private silence(intervention: Intervention | null): CoachEndpointResponse {
+    return {
+      coach: null,
+      intervention:
+        intervention === null
+          ? null
+          : {
+              type: intervention.type,
+              priority: intervention.priority,
+              confidence: intervention.confidence,
+              fingerprint: intervention.fingerprint,
+              sourceSignals: [...intervention.sourceSignals],
+              suggestedAction: { ...intervention.suggestedAction },
+            },
+      ai: { provider: 'none', generated: false },
+    };
+  }
+
+  private async loadPreferences(userId: string): Promise<{
+    coachEnabled: boolean;
+    aiCoachEnabled: boolean;
+    coachTone: string;
+    coachFrequency: string;
+    weeklyReviewEnabled: boolean;
+  }> {
+    const user = await this.databaseSvc.user.findUnique({
+      where: { id: userId },
+      select: {
+        coachEnabled: true,
+        aiCoachEnabled: true,
+        coachTone: true,
+        coachFrequency: true,
+        weeklyReviewEnabled: true,
+      },
+    });
+    // Safe defaults mirror the schema; missing rows can never break coaching.
+    return (
+      user ?? {
+        coachEnabled: true,
+        aiCoachEnabled: true,
+        coachTone: 'BALANCED',
+        coachFrequency: 'STANDARD',
+        weeklyReviewEnabled: true,
+      }
+    );
   }
 
   /**
@@ -157,7 +236,7 @@ export class CoachService {
     fallback: FallbackCoach,
     intervention: Intervention,
   ): CoachView {
-    const actionType = intervention.suggestedAction.type;
+    const actionType = intervention.suggestedAction.type; // DETERMINISTIC (§23)
     const aiLabel =
       actionType !== 'NONE' ? clean(language.actionLabel, LABEL_MAX) : '';
     return {
