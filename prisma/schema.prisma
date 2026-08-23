@@ -91,6 +91,9 @@ model User {
   resetTokenExpiry DateTime?
   avatar         String?
   pushToken      String?
+  // IANA timezone (e.g. "Asia/Karachi") used ONLY for behavioral analytics
+  // (time-of-day windows). Historical completion dates are never reinterpreted.
+  timezone       String?
   level          Int         @default(1)
   xp             Int         @default(0)
   // Cached virtual-currency balance. The RewardLedger is the source of truth;
@@ -375,6 +378,9 @@ model Completion {
   kind    CompletionKind @default(FULL)
   source  CompletionSource?
   sourceReferenceId String?
+  // Wall-clock instant the row was created (Phase 3+). Older rows have the
+  // migration timestamp and carry no reliable time-of-day signal.
+  createdAt DateTime @default(now())
   habit   Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
 
   @@unique([habitId, date])
