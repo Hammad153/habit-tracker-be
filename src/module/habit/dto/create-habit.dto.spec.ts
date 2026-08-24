@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import { CreateHabitDto } from './create-habit.dto';
+import { CreateHabitDto, } from './create-habit.dto';
+import { UpdateHabitDto } from './update-habit.dto';
 
 const base = {
   title: 'Read',
@@ -57,8 +58,6 @@ describe('CreateHabitDto — scheduledTime tolerance', () => {
   });
 
   it('UpdateHabitDto inherits the same tolerance via PartialType', () => {
-    const { UpdateHabitDto } =
-      require('./update-habit.dto') as typeof import('./update-habit.dto');
     const dto = plainToInstance(
       UpdateHabitDto,
       { scheduledTime: '  ' },
