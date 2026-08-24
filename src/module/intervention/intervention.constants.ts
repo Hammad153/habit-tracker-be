@@ -18,12 +18,6 @@ export const INTERVENTION_THRESHOLDS = {
   /** best-window count must exceed worst-window count by this ratio. */
   TIME_IMPROVEMENT_RATIO: 1.5,
 
-  /** Overload detection floors (cross-habit). Conservative by design. */
-  OVERLOAD_MIN_ACTIVE_HABITS: 5,
-  OVERLOAD_RISK_SHARE: 0.5,
-  OVERLOAD_HABIT_MISS_RATE_FLOOR: 0.5,
-  OVERLOAD_AVG_MISS_RATE_FLOOR: 0.4,
-
   /** Evidence-quality buckets based on 30-day completion sample size. */
   CONFIDENCE_HIGH_MIN_SAMPLES: 20,
   CONFIDENCE_MEDIUM_MIN_SAMPLES: 8,
@@ -278,13 +272,12 @@ export const INTERVENTION_RULES: InterventionRule[] = [
     evaluate: ({ report, ctx }) => {
       if (!ctx.crossHabit) return null;
       const { activeHabits, habitsAtRisk, avgMissRate30 } = ctx.crossHabit;
-      if (activeHabits < INTERVENTION_THRESHOLDS.OVERLOAD_MIN_ACTIVE_HABITS) {
-        return null;
-      }
-      if (habitsAtRisk / activeHabits < INTERVENTION_THRESHOLDS.OVERLOAD_RISK_SHARE) {
-        return null;
-      }
-      if ((avgMissRate30 ?? 0) < INTERVENTION_THRESHOLDS.OVERLOAD_AVG_MISS_RATE_FLOOR) {
+      // Gates live in OVERLOAD_THRESHOLDS (behavior.constants) since 3.6 —
+      // the ctx itself is pre-validated by the service; re-check cheaply.
+      if (
+        activeHabits < 5 ||
+        (avgMissRate30 ?? 0) < 0.4
+      ) {
         return null;
       }
       return {

@@ -197,3 +197,34 @@ export const TIME_WINDOW_MIN_SAMPLE = 5;
 
 /** Fallback timezone when the user has none configured. */
 export const DEFAULT_TIMEZONE = 'UTC';
+
+// ---------------------------------------------------------------------------
+// Phase 3.6 — cross-habit OVERLOAD detection & load contribution.
+// Single source of truth consumed by BOTH the per-habit InterventionEngine
+// context and the portfolio-level overload report.
+// ---------------------------------------------------------------------------
+
+export const OVERLOAD_THRESHOLDS = {
+  /** Overload is never assessed below this many active habits. */
+  MIN_ACTIVE_HABITS: 5,
+  /** At least this share of active habits must have computable 30d analytics. */
+  MIN_ANALYZED_SHARE: 0.5,
+  /** Share of ANALYZED habits at HIGH/CRITICAL risk required for overload. */
+  HIGH_RISK_SHARE: 0.5,
+  /** Average 30d miss rate across analyzed habits at/above this. */
+  AVG_MISS_RATE_MIN: 0.4,
+} as const;
+
+/**
+ * Deterministic contribution weights (sum = 1). A habit's load score blends:
+ * risk severity, missed opportunities, difficulty evidence, declining
+ * momentum, reliance on reduced versions, and streak instability.
+ */
+export const LOAD_CONTRIBUTION_WEIGHTS = {
+  riskScore: 0.3,
+  missRate30: 0.25,
+  difficultySignal: 0.15,
+  decliningMomentum: 0.1,
+  reducedKindShare: 0.1,
+  streakInstability: 0.1,
+} as const;

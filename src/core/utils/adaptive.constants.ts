@@ -74,3 +74,26 @@ export const ADAPTIVE_PROPOSAL_TYPES = [
 ] as const;
 
 export type AdaptiveProposalType = (typeof ADAPTIVE_PROPOSAL_TYPES)[number];
+
+// ---------------------------------------------------------------------------
+// Phase 3.6 — adaptation outcome measurement (14-day window).
+// ---------------------------------------------------------------------------
+
+export const OUTCOME_RULES = {
+  /** Observation length in calendar days starting at acceptance (Day 0). */
+  EVALUATION_DAYS: 14,
+  /** Minimum elapsed scheduled opportunities before classifying an outcome. */
+  MIN_SCHEDULED_OPPORTUNITIES: 3,
+  /** Completion-rate delta at/above which a side of the delta wins. */
+  RATE_DELTA: 0.15,
+} as const;
+
+/** Risk band ordering used to translate risk movement into outcome signals. */
+export const RISK_BAND_ORDER = ['LOW', 'MODERATE', 'HIGH', 'CRITICAL'] as const;
+
+export type AdaptationOutcomeName =
+  | 'PENDING'
+  | 'INSUFFICIENT_DATA'
+  | 'IMPROVED'
+  | 'UNCHANGED'
+  | 'WORSENED';

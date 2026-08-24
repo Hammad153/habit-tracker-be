@@ -13,6 +13,9 @@ import { isScheduledOnDate, shiftDayKey } from '../../core/utils/schedule.utils'
 import { evaluateIntervention } from './intervention.engine';
 import { INTERVENTION_THRESHOLDS } from './intervention.constants';
 import {
+  OVERLOAD_THRESHOLDS,
+} from '../../core/utils/behavior.constants';
+import {
   CrossHabitInsight,
   Intervention,
   InterventionHabitContext,
@@ -255,7 +258,7 @@ export class InterventionService {
     todayKey: string,
   ): CrossHabitInsight | null {
     const activeCount = siblings.length + 1; // include the analyzed habit
-    if (activeCount < INTERVENTION_THRESHOLDS.OVERLOAD_MIN_ACTIVE_HABITS) {
+    if (activeCount < OVERLOAD_THRESHOLDS.MIN_ACTIVE_HABITS) {
       return null;
     }
     let atRisk = 0;
@@ -273,21 +276,20 @@ export class InterventionService {
       if (miss.rate === null) continue;
       rated += 1;
       sum += miss.rate;
-      if (miss.rate >= INTERVENTION_THRESHOLDS.OVERLOAD_HABIT_MISS_RATE_FLOOR) {
-        atRisk += 1;
-      }
+      // Phase 3.6 semantics: "at risk" = HIGH/CRITICAL-band miss severity.
+      if (miss.rate >= OVERLOAD_THRESHOLDS.AVG_MISS_RATE_MIN) atRisk += 1;
     }
-    // Not enough cleanly-rated siblings → refuse to fake the signal (§16).
+    // Not enough cleanly-rated siblings → refuse to fake the signal.
     if (
-      rated <
-      Math.ceil(activeCount * INTERVENTION_THRESHOLDS.OVERLOAD_RISK_SHARE)
+      rated === 0 ||
+      rated / Math.max(1, activeCount - 1) < OVERLOAD_THRESHOLDS.MIN_ANALYZED_SHARE
     ) {
       return null;
     }
     return {
       activeHabits: activeCount,
       habitsAtRisk: atRisk,
-      avgMissRate30: rated > 0 ? Number((sum / rated).toFixed(4)) : null,
+      avgMissRate30: Number((sum / rated).toFixed(4)),
     };
   }
 }

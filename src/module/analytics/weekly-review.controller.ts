@@ -4,6 +4,7 @@ import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, Matches } from 'class-validator';
 import { CurrentUser } from '../../core/decorators/current-user.decorator';
 import { WeeklyReviewService } from './weekly-review.service';
+import { PortfolioOverloadService } from './portfolio-overload.service';
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -25,7 +26,16 @@ export class RegenerateWeekDto {
 @ApiBearerAuth()
 @Controller('analytics')
 export class WeeklyReviewController {
-  constructor(private readonly weeklyReviewSvc: WeeklyReviewService) {}
+  constructor(
+    private readonly weeklyReviewSvc: WeeklyReviewService,
+    private readonly overloadSvc: PortfolioOverloadService,
+  ) {}
+
+  /** Deterministic cross-habit overload report (Phase 3.6). No AI calls. */
+  @Get('overload')
+  getOverload(@CurrentUser() userId: string) {
+    return this.overloadSvc.getOverloadReport(userId);
+  }
 
   /** Weekly behavioral review for the user's timezone (spec §13). */
   @Get('weekly-review')

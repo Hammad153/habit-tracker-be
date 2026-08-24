@@ -132,29 +132,47 @@ model User {
 
 /// Phase 3.5 — user-approved adaptive habit adjustments (never auto-applied).
 model HabitAdjustmentProposal {
-  id               String    @id @default(cuid())
-  userId           String
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  habitId          String
-  habit            Habit     @relation(fields: [habitId], references: [id], onDelete: Cascade)
-  fingerprint      String
-  type             String // REDUCE_TARGET | REDUCE_FREQUENCY | CHANGE_TIME
-  status           String    @default("PENDING") // PENDING|ACCEPTED|REJECTED|EXPIRED
-  state            String // TOO_HARD | MINIMUM_VERSION_OVERUSED | TIMING_PROBLEM ...
-  currentSnapshot  Json
-  proposedSnapshot Json
-  confidence       Float
-  reason           String
-  sourceSignals    String[]  @default([])
-  evidence         Json
-  aiHeadline       String?
-  aiMessage        String?
-  createdAt        DateTime  @default(now())
-  resolvedAt       DateTime?
+  id                     String    @id @default(cuid())
+  userId                 String
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habitId                String
+  habit                  Habit     @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  fingerprint            String
+  type                   String // REDUCE_TARGET | REDUCE_FREQUENCY | CHANGE_TIME
+  status                 String    @default("PENDING") // PENDING|ACCEPTED|REJECTED|EXPIRED
+  state                  String // TOO_HARD | MINIMUM_VERSION_OVERUSED | TIMING_PROBLEM ...
+  currentSnapshot        Json
+  proposedSnapshot       Json
+  confidence             Float
+  reason                 String
+  sourceSignals          String[]  @default([])
+  evidence               Json
+  aiHeadline             String?
+  aiMessage              String?
+  createdAt              DateTime  @default(now())
+  resolvedAt             DateTime?
+  // ---- Phase 3.6: immutable baseline + measured outcome (nullable for
+  // pre-3.6 rows; baseline is written ONCE at acceptance and never mutated).
+  baselineCompletionRate Float?
+  baselineMissRate       Float?
+  baselineStreak         Int?
+  baselineRiskLevel      String?
+  baselineRiskScore      Float?
+  acceptedAt             DateTime?
+  evaluationStartDate    String? // YYYY-MM-DD day key
+  evaluationEndDate      String? // YYYY-MM-DD day key
+  scheduledOpportunities Int?
+  postCompletionRate     Float?
+  postMissRate           Float?
+  postStreak             Int?
+  postRiskLevel          String?
+  postRiskScore          Float?
+  outcome                String? // PENDING|INSUFFICIENT_DATA|IMPROVED|UNCHANGED|WORSENED
 
   @@unique([habitId, fingerprint, status])
   @@index([userId, createdAt])
   @@index([habitId, createdAt])
+  @@index([status, outcome])
 }
 
 /// Phase 3.4 — one persisted behavioral review per user per ISO week (Mon-based).
