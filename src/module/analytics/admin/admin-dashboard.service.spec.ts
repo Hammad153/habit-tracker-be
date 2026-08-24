@@ -119,13 +119,34 @@ describe('dashboard aggregates & honesty markers', () => {
     expect(rt!.effectivenessRate).toBeNull();
   });
 
-  it('NOT_MEASURABLE used where no persisted data exists (no fabrication)', async () => {
+  it('Phase 4.1 ledger makes the funnels measurable with correct denominators', async () => {
     const { svc } = makeDeps();
     const res = await svc.getDashboard();
-    expect(res.interventions.generated).toBe('NOT_MEASURABLE');
-    expect(res.notifications.candidates).toBe('NOT_MEASURABLE');
-    expect(res.notifications.deliveryRate).toBe('NOT_MEASURABLE');
-      });
+
+    // Intervention funnel: generated → viewed / completed denominators.
+    expect(res.interventions.generated).toBe(12);
+    expect(res.interventions.viewed).toBe(9);
+    expect(res.interventions.viewRate).toEqual({
+      suppressed: false, rate: Number((9 / 12).toFixed(4)),
+    });
+    // ACTION_COMPLETED count is 4 < MIN_AGGREGATE_SAMPLE → suppressed
+    // (privacy floor applies to rates, not just raw counts):
+    expect(res.interventions.actionRate).toEqual({
+      suppressed: true, reason: 'INSUFFICIENT_AGGREGATE_SAMPLE',
+    });
+
+    // Notification funnel: openRate uses DELIVERED denominator (spec §14).
+    expect(res.notifications.candidates).toBe(30);
+    expect(res.notifications.delivered).toBe(26);
+    expect(res.notifications.openRate).toEqual({
+      suppressed: false, rate: Number((11 / 26).toFixed(4)),
+    });
+    expect(res.notifications.actionRate).toEqual({
+      suppressed: false, rate: Number((6 / 26).toFixed(4)), // 6 ≥ floor
+    });
+    expect(JSON.stringify(res)).not.toContain('u1');
+    expect(res.interventions.byType).toBe('NOT_MEASURABLE'); // still honest
+  });
 
   it('notification deliveries aggregate by type with the privacy floor', async () => {
     const { svc, db } = makeDeps();

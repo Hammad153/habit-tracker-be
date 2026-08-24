@@ -162,12 +162,12 @@ export class AdminDashboardService {
           events.INTERVENTION_ACTION_COMPLETED ?? 0,
         ),
         viewRate: this.rate(
-          events.INTERVENTION_GENERATED ?? 0,
-          events.INTERVENTION_VIEWED ?? 0,
+          events.INTERVENTION_VIEWED ?? 0,      // numerator
+          events.INTERVENTION_GENERATED ?? 0,   // denominator (§14)
         ),
         actionRate: this.rate(
-          events.INTERVENTION_GENERATED ?? 0,
           events.INTERVENTION_ACTION_COMPLETED ?? 0,
+          events.INTERVENTION_GENERATED ?? 0,
         ),
         byType: 'NOT_MEASURABLE' as const, // intervention type lives on the
         // response payload, not yet on the ledger row (future column).
@@ -206,16 +206,16 @@ export class AdminDashboardService {
         actionStarted: floorCount(events.NOTIFICATION_ACTION_STARTED ?? 0),
         actionCompleted: floorCount(events.NOTIFICATION_ACTION_COMPLETED ?? 0),
         deliveryRate: this.rate(
-          events.NOTIFICATION_CANDIDATE_GENERATED ?? 0,
           events.NOTIFICATION_DELIVERED ?? 0,
+          events.NOTIFICATION_CANDIDATE_GENERATED ?? 0,
         ),
         openRate: this.rate(
-          events.NOTIFICATION_DELIVERED ?? 0, // correct denominator (§14)
           events.NOTIFICATION_OPENED ?? 0,
+          events.NOTIFICATION_DELIVERED ?? 0, // correct denominator (§14)
         ),
         actionRate: this.rate(
-          events.NOTIFICATION_DELIVERED ?? 0,
           events.NOTIFICATION_ACTION_COMPLETED ?? 0,
+          events.NOTIFICATION_DELIVERED ?? 0,
         ),
         byType: await this.deliveriesByType(startAt, endAt),
       },
@@ -450,6 +450,9 @@ export class AdminDashboardService {
       denominator < MIN_AGGREGATE_SAMPLE ||
       numerator < MIN_AGGREGATE_SAMPLE
     ) {
+      return { suppressed: true as const, reason: SUPPRESSED_REASON };
+    }
+    if (denominator === 0) {
       return { suppressed: true as const, reason: SUPPRESSED_REASON };
     }
     return {

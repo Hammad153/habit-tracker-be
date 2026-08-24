@@ -1,6 +1,7 @@
 import {
   BehavioralEventService,
 } from './behavioral-event.service';
+import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../core/database/database.service';
 
 const makeDeps = () => {
@@ -30,12 +31,10 @@ const makeDeps = () => {
 describe('ledger — idempotency (DB unique collapse)', () => {
   it('duplicate logical event collapses via P2002 → deduplicated:true', async () => {
     const { svc, db } = makeDeps();
-    const prismaError = Object.assign(
-      new Error('Unique constraint failed'),
-      { code: 'P2002' },
+    const prismaError = new Prisma.PrismaClientKnownRequestError(
+      'Unique constraint failed',
+      { code: 'P2002', clientVersion: '7' },
     );
-    // Simulate PrismaClientKnownRequestError shape:
-    Object.setPrototypeOf(prismaError, new (require('@prisma/client').Prisma.PrismaClientKnownRequestError)('dup', { code: 'P2002', clientVersion: '7' }));
     db.behavioralEvent.create.mockRejectedValueOnce(prismaError);
 
     const res = await svc.record('u1', {
@@ -52,8 +51,10 @@ describe('ledger — idempotency (DB unique collapse)', () => {
 
   it('concurrent duplicates hit the same unique key — one logical row', async () => {
     const { svc, db } = makeDeps();
-    const PCE = require('@prisma/client').Prisma;
-    const dup = new PCE.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: '7' });
+    const dup = new Prisma.PrismaClientKnownRequestError('dup', {
+      code: 'P2002',
+      clientVersion: '7',
+    });
     db.behavioralEvent.create
       .mockRejectedValueOnce(dup)
       .mockRejectedValueOnce(dup);
