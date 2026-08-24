@@ -4,10 +4,11 @@ import { AnalyticsModule } from '../analytics/analytics.module';
 import { DatabaseService } from '../../core/database/database.service';
 import { NotificationsController } from './notifications.controller';
 import { NotificationCandidatesService } from './notification-candidates.service';
+import { PortfolioOverloadService } from '../analytics/portfolio-overload.service';
 
 @Module({
   imports: [AnalyticsModule, AiProviderModule],
   controllers: [NotificationsController],
-  providers: [NotificationCandidatesService, DatabaseService],
+  providers: [NotificationCandidatesService, DatabaseService, PortfolioOverloadService],
 })
 export class NotificationsModule {}
