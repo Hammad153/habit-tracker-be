@@ -5,6 +5,16 @@ import type { AiProvider } from '../../core/ai/ai-provider.interface';
 import { parseValidatedJson } from '../../core/ai/structured-output.util';
 import { DatabaseService } from '../../core/database/database.service';
 import {
+  OUTCOME_RULES,
+  RISK_BAND_ORDER,
+  AdaptationOutcomeName,
+} from '../../core/utils/adaptive.constants';
+import {
+  buildDaySeries,
+} from '../../core/utils/behavior-analytics.utils';
+import { isScheduledOnDate, shiftDayKey } from '../../core/utils/schedule.utils';
+import { localDateKeyInZone } from '../../core/utils/week.utils';
+import {
   AdaptiveAnalysis,
   adaptiveFingerprint,
   analyzeAdaptation,
@@ -155,16 +165,238 @@ export class AdaptiveService {
     const row = await this.findOwnedPendingProposal(userId, habitId, proposalId);
     const proposed = row.proposedSnapshot as AdaptiveProposedSnapshot;
 
+    // Immutable BASELINE captured BEFORE the change (Phase 3.6 §9).
+    const user = await this.databaseSvc.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    const todayKey = localDateKeyInZone(user?.timezone ?? null);
+    const baseline = await this.habitAnalyticsSvc.getHabitBehaviorReport(
+      userId,
+      habitId,
+      todayKey,
+    );
+
     // Narrow patch through the canonical service — no direct Prisma writes,
     // no reward/streak/identity side effects beyond the normal edit path.
     await this.habitSvc.updateHabit(habitId, userId, proposed);
 
+    // Baseline + window are written exactly once, at this transition only;
+    // evaluators below never touch them (§13 idempotency / §22 safety).
     await this.databaseSvc.habitAdjustmentProposal.update({
       where: { id: row.id },
-      data: { status: 'ACCEPTED', resolvedAt: new Date() },
+      data: {
+        status: 'ACCEPTED',
+        resolvedAt: new Date(),
+        acceptedAt: new Date(),
+        baselineCompletionRate: baseline.completionRates.d30.rate,
+        baselineMissRate: baseline.missRates.d30.rate,
+        baselineStreak: baseline.streaks.current,
+        baselineRiskLevel: baseline.risk.level,
+        baselineRiskScore: baseline.risk.score,
+        evaluationStartDate: todayKey,
+        evaluationEndDate: shiftDayKey(
+          todayKey,
+          OUTCOME_RULES.EVALUATION_DAYS - 1,
+        ),
+        outcome: 'PENDING',
+      },
     });
 
     return this.replayWithConfirmation(row, 'Your habit has been adjusted. Let’s see how this version performs.');
+  }
+
+  /**
+   * Lazy, idempotent outcome evaluation for every accepted proposal whose
+   * observation window has closed. Concurrent callers race on a guarded
+   * update (`outcome: null` → value); losers simply write nothing (§13).
+   */
+  public async evaluateDueOutcomes(userId: string, habitId: string): Promise<void> {
+    const user = await this.databaseSvc.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    const todayKey = localDateKeyInZone(user?.timezone ?? null);
+
+    const due = await this.databaseSvc.habitAdjustmentProposal.findMany({
+      where: {
+        userId,
+        habitId,
+        status: 'ACCEPTED',
+        outcome: null,
+        NOT: [{ evaluationEndDate: null }],
+        evaluationEndDate: { lte: todayKey },
+      },
+      take: 20,
+      orderBy: { acceptedAt: 'asc' },
+    });
+
+    for (const row of due) {
+      const evalStart = row.evaluationStartDate as string;
+      const evalEnd = row.evaluationEndDate as string;
+      const span = Math.max(
+        1,
+        Math.round(
+          (new Date(`${evalEnd}T12:00:00.000Z`).getTime() -
+            new Date(`${evalStart}T12:00:00.000Z`).getTime()) /
+            86_400_000,
+        ) + 1,
+      );
+
+      // Exact-window facts from raw completion rows (no reinterpretation).
+      const habitRow = await this.databaseSvc.habit.findFirst({
+        where: { id: habitId, userId },
+        select: {
+          scheduleType: true,
+          scheduleDays: true,
+          timesPerWeek: true,
+          intervalDays: true,
+          startDate: true,
+          completions: {
+            where: { date: { gte: evalStart, lte: evalEnd } },
+            select: { date: true, status: true },
+          },
+        },
+      });
+      if (!habitRow) continue;
+
+      const doneDates = new Set(
+        habitRow.completions.filter((c) => c.status).map((c) => c.date),
+      );
+      let opportunities = 0;
+      let doneCount = 0;
+      for (let k = 0; k < span; k++) {
+        const key = shiftDayKey(evalStart, k);
+        if (!isScheduledOnDate(habitRow, key)) continue;
+        opportunities += 1;
+        if (doneDates.has(key)) doneCount += 1;
+      }
+
+      const base: Record<string, unknown> = {
+        scheduledOpportunities: opportunities,
+      };
+      let outcome: AdaptationOutcomeName;
+
+      if (opportunities < OUTCOME_RULES.MIN_SCHEDULED_OPPORTUNITIES) {
+        outcome = 'INSUFFICIENT_DATA';
+      } else {
+        const postRate = Number((doneCount / opportunities).toFixed(4));
+        const postMiss = Number((1 - postRate).toFixed(4));
+        // Reuse Phase 3.1 for post-window streak/risk (as-of window end).
+        const post = await this.habitAnalyticsSvc.getHabitBehaviorReport(
+          userId,
+          habitId,
+          evalEnd,
+        );
+        const delta =
+          postRate - Number(row.baselineCompletionRate ?? 0);
+        const bandDelta =
+          RISK_BAND_ORDER.indexOf(
+            (post.risk.level as (typeof RISK_BAND_ORDER)[number]) ?? 'LOW',
+          ) -
+          RISK_BAND_ORDER.indexOf(
+            (row.baselineRiskLevel as (typeof RISK_BAND_ORDER)[number]) ??
+              'LOW',
+          );
+        const rateImproved = delta >= OUTCOME_RULES.RATE_DELTA;
+        const rateWorsened = delta <= -OUTCOME_RULES.RATE_DELTA;
+        const riskImproved = bandDelta <= -1;
+        const riskWorsened = bandDelta >= 1;
+        // Conflicting signals cancel out to UNCHANGED (conservative).
+        outcome =
+          (rateImproved || riskImproved) && !(rateWorsened || riskWorsened)
+            ? 'IMPROVED'
+            : (rateWorsened || riskWorsened) && !(rateImproved || riskImproved)
+              ? 'WORSENED'
+              : 'UNCHANGED';
+
+        Object.assign(base, {
+          postCompletionRate: postRate,
+          postMissRate: postMiss,
+          postStreak: post.streaks.current,
+          postRiskLevel: post.risk.level,
+          postRiskScore: post.risk.score,
+        });
+      }
+
+      // Guarded finalize: only the first writer wins; baselines never touched.
+      await this.databaseSvc.habitAdjustmentProposal.updateMany({
+        where: { id: row.id, outcome: null },
+        data: { outcome, ...base },
+      });
+    }
+  }
+
+  /** Habit-level adaptation effectiveness summary (Phase 3.6 §14). */
+  public async getAdaptationOutcomes(userId: string, habitId: string) {
+    const owned = await this.databaseSvc.habit.findFirst({
+      where: { id: habitId, userId },
+      select: { id: true },
+    });
+    if (!owned) throw new NotFoundException('Habit not found');
+
+    await this.evaluateDueOutcomes(userId, habitId);
+
+    const rows = await this.databaseSvc.habitAdjustmentProposal.findMany({
+      where: { userId, habitId },
+      select: {
+        status: true,
+        outcome: true,
+        type: true,
+        baselineCompletionRate: true,
+        postCompletionRate: true,
+        acceptedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    const acceptedRows = rows.filter((r) => r.status === 'ACCEPTED');
+    const rejected = rows.filter((r) => r.status === 'REJECTED').length;
+    const evaluated = acceptedRows.filter(
+      (r) =>
+        r.outcome === 'IMPROVED' ||
+        r.outcome === 'UNCHANGED' ||
+        r.outcome === 'WORSENED',
+    );
+    const deltas = evaluated
+      .map((r) =>
+        r.postCompletionRate !== null && r.baselineCompletionRate !== null
+          ? Number((r.postCompletionRate - r.baselineCompletionRate).toFixed(4))
+          : null,
+      )
+      .filter((v): v is number => v !== null);
+
+    const latest = acceptedRows.find(
+      (r) => r.outcome && r.outcome !== 'PENDING',
+    );
+
+    return {
+      accepted: acceptedRows.length,
+      rejected,
+      completedEvaluations: evaluated.length,
+      improved: evaluated.filter((r) => r.outcome === 'IMPROVED').length,
+      unchanged: evaluated.filter((r) => r.outcome === 'UNCHANGED').length,
+      worsened: evaluated.filter((r) => r.outcome === 'WORSENED').length,
+      averageCompletionDelta:
+        deltas.length > 0
+          ? Number(
+              (
+                deltas.reduce((a, b) => a + b, 0) / deltas.length
+              ).toFixed(4),
+            )
+          : null,
+      latestOutcome: latest?.outcome ?? null,
+      recent: acceptedRows
+        .filter((r) => r.outcome && r.outcome !== 'PENDING')
+        .slice(0, 3)
+        .map((r) => ({
+          type: r.type,
+          outcome: r.outcome as string,
+          baselineCompletionRate: r.baselineCompletionRate,
+          postCompletionRate: r.postCompletionRate,
+        })),
+    };
   }
 
   public async rejectProposal(

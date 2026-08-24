@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { HabitService } from './habit.service';
 import { HabitController } from './habit.controller';
+import { AdaptiveOutcomeController } from './adaptive-outcome.controller';
 import { AdaptiveService } from './adaptive.service';
 import { DatabaseService } from '../../core/database/database.service';
 import { ProfileModule } from '../profile/profile.module';
@@ -11,7 +12,7 @@ import { AiProviderModule } from '../../core/ai/ai-provider.module';
 
 @Module({
   imports: [ProfileModule, AwardsModule, RewardsModule, AnalyticsModule, AiProviderModule],
-  controllers: [HabitController],
+  controllers: [HabitController, AdaptiveOutcomeController],
   providers: [HabitService, AdaptiveService, DatabaseService],
 })
 export class HabitModule {}
