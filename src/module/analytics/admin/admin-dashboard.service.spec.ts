@@ -129,14 +129,17 @@ describe('dashboard aggregates & honesty markers', () => {
     // Intervention funnel: generated → viewed / completed denominators.
     expect(res.interventions.generated).toBe(12);
     expect(res.interventions.viewed).toBe(9);
-    expect(res.interventions.viewRate).toEqual({
-      suppressed: false, rate: Number((9 / 12).toFixed(4)),
+    // Rates expose EXPLICIT denominators (Phase 4.2 contract):
+    expect(res.interventions.viewRate).toMatchObject({
+      suppressed: false, rate: 0.75,
+      numerator: 9, denominator: 12, label: 'viewed/generated',
     });
-    // ACTION_COMPLETED count is 4 < MIN_AGGREGATE_SAMPLE → suppressed
+    // ACTION_COMPLETED count is 4 < MIN_AGGREGATE_SAMPLE → rate suppressed
     // (privacy floor applies to rates, not just raw counts):
-    expect(res.interventions.actionRate).toEqual({
-      suppressed: true, reason: 'INSUFFICIENT_AGGREGATE_SAMPLE',
-    });
+    expect(res.interventions.actionRate.suppressed).toBe(true);
+    expect(res.interventions.actionRate.reason).toBe(
+      'INSUFFICIENT_AGGREGATE_SAMPLE',
+    );
 
     // Notification funnel: openRate uses DELIVERED denominator (spec §14).
     expect(res.notifications.candidates).toBe(30);
