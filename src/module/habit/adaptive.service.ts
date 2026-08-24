@@ -1,12 +1,5 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { plainToInstance } from 'class-transformer';
-import { validateSync } from 'class-validator';
-import {
-  IsIn,
-  IsOptional,
-  IsString,
-  Length,
-} from 'class-validator';
+import { IsOptional, IsString, Length } from 'class-validator';
 import { AI_PROVIDER } from '../../core/ai/ai-provider.interface';
 import type { AiProvider } from '../../core/ai/ai-provider.interface';
 import { parseValidatedJson } from '../../core/ai/structured-output.util';
@@ -68,8 +61,6 @@ export interface AdaptiveSuggestionResponse {
   ai: { provider: string; generated: boolean; model?: string };
 }
 
-const UNIT_LABEL = (unit: string | null): string => unit?.trim() || 'units';
-
 @Injectable()
 export class AdaptiveService {
   private readonly logger = new Logger(AdaptiveService.name);
@@ -104,7 +95,7 @@ export class AdaptiveService {
     });
     if (!habit) throw new NotFoundException('Habit not found');
 
-    const analysis = analyzeAdaptation(report, habit, habit);
+    const analysis = analyzeAdaptation(report, habit);
     if (!analysis.proposal || analysis.confidence < 0.6) {
       return {
         suggestion: null,
@@ -121,7 +112,7 @@ export class AdaptiveService {
       orderBy: { createdAt: 'desc' },
     });
     if (existing && existing.fingerprint === fingerprint) {
-      return this.fromRow(existing, false);
+      return this.fromRow(existing);
     }
     if (existing) {
       await this.databaseSvc.habitAdjustmentProposal.updateMany({
@@ -152,7 +143,7 @@ export class AdaptiveService {
       data: { aiHeadline: language.headline, aiMessage: language.message },
     });
     void updated;
-    return this.response(analysis, fingerprint, created.id, language, language.generated);
+    return this.response(analysis, fingerprint, created.id, language);
   }
 
   /** Acceptance applies through the EXISTING habit update path — nothing else. */
@@ -334,10 +325,7 @@ export class AdaptiveService {
     };
   }
 
-  private fromRow(
-    row: Parameters<AdaptiveService['snapshotOf']>[0],
-    _cached: boolean,
-  ) {
+  private fromRow(row: Parameters<AdaptiveService['snapshotOf']>[0]) {
     const res = this.snapshotOf(row);
     res.ai.model = this.aiProvider.model ?? undefined;
     return res;
@@ -348,7 +336,6 @@ export class AdaptiveService {
     fingerprint: string,
     id: string,
     language: { headline: string; message: string; actionLabel: string; generated: boolean },
-    _gen: boolean,
   ): AdaptiveSuggestionResponse {
     return {
       suggestion: {

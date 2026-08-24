@@ -35,6 +35,17 @@ const HABIT_ROW = {
   ],
 };
 
+// Clock-sensitive paths (implicit "today") are frozen for determinism.
+beforeAll(() => {
+  jest.useFakeTimers({
+    doNotFake: ['nextTick', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'queueMicrotask', 'performance'],
+  });
+  jest.setSystemTime(new Date('2026-08-23T12:00:00.000Z'));
+});
+afterAll(() => {
+  jest.useRealTimers();
+});
+
 describe('HabitAnalyticsService', () => {
   it('throws NotFound when the habit does not exist or belongs to someone else', async () => {
     const db = makeDb();

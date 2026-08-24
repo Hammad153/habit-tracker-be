@@ -289,6 +289,17 @@ describe('WeeklyReviewService — privacy & determinism (spec §15)', () => {
   });
 });
 
+// Clock-sensitive paths (implicit "today") are frozen for determinism.
+beforeAll(() => {
+  jest.useFakeTimers({
+    doNotFake: ['nextTick', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'queueMicrotask', 'performance'],
+  });
+  jest.setSystemTime(new Date('2026-08-23T12:00:00.000Z'));
+});
+afterAll(() => {
+  jest.useRealTimers();
+});
+
 function basePrefs() {
   return {
     coachEnabled: true,

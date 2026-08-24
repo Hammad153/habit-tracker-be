@@ -68,11 +68,6 @@ const round2 = (v: number): number => Number(v.toFixed(2));
 export const analyzeAdaptation = (
   report: BehaviorReport,
   shape: AdaptiveHabitShape,
-  snapshots: {
-    fullBehavior: string | null;
-    minimumBehavior: string | null;
-    emergencyMinimum: string | null;
-  },
 ): AdaptiveAnalysis => {
   const evidence: AdaptiveEvidence = {
     completionRate30: report.completionRates.d30.rate,

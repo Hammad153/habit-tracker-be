@@ -1,4 +1,4 @@
-import { BehaviorReport, buildBehaviorReport, CompletionFact } from '../../core/utils/behavior-analytics.utils';
+import { buildBehaviorReport, CompletionFact } from '../../core/utils/behavior-analytics.utils';
 import {
   AdaptiveHabitShape,
   adaptiveFingerprint,
@@ -31,12 +31,6 @@ const SHAPE: AdaptiveHabitShape = {
   scheduledTime: '20:00',
 };
 
-const SNAP = {
-  fullBehavior: 'Run 5km',
-  minimumBehavior: 'Walk 5 minutes',
-  emergencyMinimum: null,
-};
-
 const reportOf = (
   completions: CompletionFact[],
   overrides: Partial<Parameters<typeof buildBehaviorReport>[0]['habit']> = {},
@@ -53,8 +47,7 @@ const reportOf = (
  */
 const hardCompletions = (): CompletionFact[] => {
   const out: CompletionFact[] = [
-    ...run(TODAY, 6, { kind: 'MINIMUM' }), // Aug 18-23 barely showing up
-    { date: '2026-08-17', status: true, value: 1, kind: 'EMERGENCY' },
+    ...run(TODAY, 7, { kind: 'MINIMUM' }), // Aug 17-23: only the minimum version
   ];
   for (let i = 8; i <= 29; i += 3) {
     const d = new Date(`${TODAY}T12:00:00.000Z`);
@@ -72,7 +65,7 @@ const hardCompletions = (): CompletionFact[] => {
 
 describe('adaptive analysis — difficulty cluster', () => {
   it('TOO_HARD + low rate + min overuse → REDUCE_TARGET halving the goal', () => {
-    const analysis = analyzeAdaptation(reportOf(hardCompletions()), SHAPE, SNAP);
+    const analysis = analyzeAdaptation(reportOf(hardCompletions()), SHAPE);
     expect(analysis.state).toBe('MINIMUM_VERSION_OVERUSED');
     expect(analysis.proposal?.type).toBe('REDUCE_TARGET');
     expect(analysis.proposal?.current.goal).toBe(5);
@@ -83,13 +76,13 @@ describe('adaptive analysis — difficulty cluster', () => {
   });
 
   it('high completion with no difficulty signal → NO_CHANGE (never optimize)', () => {
-    const analysis = analyzeAdaptation(reportOf(run(TODAY, 30)), SHAPE, SNAP);
+    const analysis = analyzeAdaptation(reportOf(run(TODAY, 30)), SHAPE);
     expect(['NO_CHANGE', 'CONSISTENCY_IMPROVING']).toContain(analysis.state);
     expect(analysis.proposal).toBeNull();
   });
 
   it('insufficient history → INSUFFICIENT_EVIDENCE regardless of signals', () => {
-    const analysis = analyzeAdaptation(reportOf([]), SHAPE, SNAP);
+    const analysis = analyzeAdaptation(reportOf([]), SHAPE);
     expect(analysis.state).toBe('INSUFFICIENT_EVIDENCE');
     expect(analysis.proposal).toBeNull();
     expect(analysis.confidence).toBe(0);
@@ -97,7 +90,7 @@ describe('adaptive analysis — difficulty cluster', () => {
 
   it('thin samples below the floor never produce proposals', () => {
     // Exactly 3 completions (< MIN_COMPLETION_SAMPLES_30D=6).
-    const analysis = analyzeAdaptation(reportOf(run(TODAY, 3, { kind: 'MINIMUM' })), SHAPE, SNAP);
+    const analysis = analyzeAdaptation(reportOf(run(TODAY, 3, { kind: 'MINIMUM' })), SHAPE);
     expect(analysis.state).toBe('INSUFFICIENT_EVIDENCE');
   });
 
@@ -105,7 +98,6 @@ describe('adaptive analysis — difficulty cluster', () => {
     const analysis = analyzeAdaptation(
       reportOf(hardCompletions()),
       { ...SHAPE, goal: 1 },
-      SNAP,
     );
     if (analysis.proposal) {
       expect(analysis.proposal.type).not.toBe('REDUCE_TARGET');
@@ -119,7 +111,7 @@ describe('adaptive analysis — emergency & minimum evidence', () => {
       ...run(TODAY, 6, { kind: 'EMERGENCY' }),
       ...run('2026-08-15', 24),
     ];
-    const analysis = analyzeAdaptation(reportOf(comps), SHAPE, SNAP);
+    const analysis = analyzeAdaptation(reportOf(comps), SHAPE);
     expect(['EMERGENCY_VERSION_OVERUSED', 'NO_CHANGE']).toContain(analysis.state);
     if (analysis.state === 'EMERGENCY_VERSION_OVERUSED') {
       expect(analysis.evidence.emergencyCount30).toBeGreaterThanOrEqual(4);
@@ -136,7 +128,7 @@ describe('adaptive analysis — frequency cluster', () => {
     };
     // Sparse completions: ~40% of days.
     const comps = run(TODAY, 30, { skipWeekdays: [1, 3, 5] }); // misses Mon/Wed/Fri
-    const analysis = analyzeAdaptation(reportOf(comps), shape, SNAP);
+    const analysis = analyzeAdaptation(reportOf(comps), shape);
     if (analysis.proposal?.type === 'REDUCE_FREQUENCY') {
       expect(analysis.proposal.current.timesPerWeek).toBe(7);
       expect(analysis.proposal.proposed.timesPerWeek).toBeGreaterThanOrEqual(2);
@@ -170,7 +162,7 @@ describe('adaptive analysis — timing cluster', () => {
   };
 
   it('best-window mismatch proposes CHANGE_TIME to the bucket representative', () => {
-    const analysis = analyzeAdaptation(timedReport(), { ...SHAPE, scheduledTime: '21:00' }, SNAP);
+    const analysis = analyzeAdaptation(timedReport(), { ...SHAPE, scheduledTime: '21:00' });
     if (analysis.proposal?.type === 'CHANGE_TIME') {
       expect(analysis.proposal.current.scheduledTime).toBe('21:00');
       expect(analysis.proposal.proposed.scheduledTime).toMatch(/^\d{2}:\d{2}$/);
@@ -184,19 +176,19 @@ describe('adaptive analysis — timing cluster', () => {
   it('cue already inside the best window → no timing proposal', () => {
     const report = timedReport();
     report.timeWindows.scheduledBucketCode = report.timeWindows.best!.code;
-    const analysis = analyzeAdaptation(report, { ...SHAPE, scheduledTime: '07:30' }, SNAP);
+    const analysis = analyzeAdaptation(report, { ...SHAPE, scheduledTime: '07:30' });
     expect(analysis.proposal?.type ?? 'none').not.toBe('CHANGE_TIME');
   });
 
   it('no cue time set → no CHANGE_TIME proposal even with strong windows', () => {
-    const analysis = analyzeAdaptation(timedReport(), { ...SHAPE, scheduledTime: null }, SNAP);
+    const analysis = analyzeAdaptation(timedReport(), { ...SHAPE, scheduledTime: null });
     expect(analysis.proposal?.type ?? 'none').not.toBe('CHANGE_TIME');
   });
 });
 
 describe('adaptive analysis — identity & determinism', () => {
   it('identity is NOT part of the deterministic contract (framing only)', () => {
-    const a = analyzeAdaptation(reportOf(hardCompletions()), SHAPE, SNAP);
+    const a = analyzeAdaptation(reportOf(hardCompletions()), SHAPE);
     expect(JSON.stringify(a)).not.toContain('Runner');
   });
 
@@ -204,8 +196,8 @@ describe('adaptive analysis — identity & determinism', () => {
     const completions = hardCompletions();
     const report = reportOf(completions);
     const snap = JSON.stringify(report);
-    const a = analyzeAdaptation(report, SHAPE, SNAP);
-    const b = analyzeAdaptation(report, SHAPE, SNAP);
+    const a = analyzeAdaptation(report, SHAPE);
+    const b = analyzeAdaptation(report, SHAPE);
     expect(a).toEqual(b);
     expect(JSON.stringify(report)).toBe(snap);
   });
@@ -213,7 +205,7 @@ describe('adaptive analysis — identity & determinism', () => {
 
 describe('adaptive fingerprint', () => {
   it('identical evidence yields identical fingerprints; moved evidence changes them', () => {
-    const a = analyzeAdaptation(reportOf(hardCompletions()), SHAPE, SNAP);
+    const a = analyzeAdaptation(reportOf(hardCompletions()), SHAPE);
     const fa = adaptiveFingerprint('h1', a);
     const fb = adaptiveFingerprint('h1', a);
     expect(fa).toBe(fb);
@@ -222,7 +214,6 @@ describe('adaptive fingerprint', () => {
     const shifted = analyzeAdaptation(
       reportOf(hardCompletions().map((c) => ({ ...c, status: c.status && !c.date.endsWith('22') }))),
       SHAPE,
-      SNAP,
     );
     if (shifted.proposal && a.proposal) {
       const fs = adaptiveFingerprint('h1', shifted);
@@ -234,7 +225,7 @@ describe('adaptive fingerprint', () => {
   });
 
   it('advice-only analyses have an empty fingerprint', () => {
-    const none = analyzeAdaptation(reportOf(run(TODAY, 30)), SHAPE, SNAP);
+    const none = analyzeAdaptation(reportOf(run(TODAY, 30)), SHAPE);
     expect(adaptiveFingerprint('h1', none)).toBe('');
   });
 });
