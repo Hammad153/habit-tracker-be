@@ -58,8 +58,8 @@ describe('ledger — idempotency (DB unique collapse)', () => {
       .mockRejectedValueOnce(dup)
       .mockRejectedValueOnce(dup);
     const results = await Promise.all([
-      svc.record('u1', { type: 'INTERVENTION_DISMISSED', fingerprint: 'fp-x' }),
-      svc.record('u1', { type: 'INTERVENTION_DISMISSED', fingerprint: 'fp-x' }),
+      svc.record('u1', { type: 'INTERVENTION_DISMISSED', fingerprint: 'fingerprint-dismissed' }),
+      svc.record('u1', { type: 'INTERVENTION_DISMISSED', fingerprint: 'fingerprint-dismissed' }),
     ]);
     expect(results.every((r) => r.deduplicated)).toBe(true);
   });
@@ -86,19 +86,20 @@ describe('intervention funnel — server-authoritative transitions', () => {
 
   it('ACTION_COMPLETED requires a verified completion for the correlated habit today', async () => {
     const { svc, db } = makeDeps();
-    db.behavioralEvent.findFirst
-      .mockResolvedValueOnce({ id: 'gen', habitId: 'h1' }) // GENERATED exists
-      .mockResolvedValueOnce(null); // no prior STARTED check needed here
+    db.behavioralEvent.findFirst.mockResolvedValue({
+      id: 'gen',
+      habitId: 'h1',
+    }); // GENERATED exists (persists across both calls)
     db.completion.findFirst.mockResolvedValue(null); // NOT completed today
 
     await expect(
-      svc.recordInterventionInteraction('u1', 'fp-1', 'INTERVENTION_ACTION_COMPLETED'),
+      svc.recordInterventionInteraction('u1', 'fingerprint-1', 'INTERVENTION_ACTION_COMPLETED'),
     ).rejects.toThrow(/requires a verified habit completion/);
 
     // And with a real completion, the event records:
     db.completion.findFirst.mockResolvedValue({ id: 'c1' });
     db.behavioralEvent.create.mockResolvedValueOnce({ id: 'ok' });
-    const res = await svc.recordInterventionInteraction('u1', 'fp-1', 'INTERVENTION_ACTION_COMPLETED');
+    const res = await svc.recordInterventionInteraction('u1', 'fingerprint-1', 'INTERVENTION_ACTION_COMPLETED');
     expect(res.deduplicated).toBe(false);
     expect(db.behavioralEvent.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ type: 'INTERVENTION_ACTION_COMPLETED' }) }),
