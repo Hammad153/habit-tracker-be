@@ -90,7 +90,7 @@ export class BehavioralEventService {
       | 'INTERVENTION_ACTION_STARTED'
       | 'INTERVENTION_ACTION_COMPLETED'
     >,
-  ): Promise<void> {
+  ): Promise<{ id: string; deduplicated: boolean }> {
     this.assertFingerprint(fingerprint);
     if (!INTERVENTION_TYPES.has(type)) {
       throw new BadRequestException('invalid intervention event type');
@@ -129,7 +129,11 @@ export class BehavioralEventService {
         );
       }
     }
-    await this.record(userId, { type, fingerprint, habitId: generated.habitId });
+    return this.record(userId, {
+      type,
+      fingerprint,
+      habitId: generated.habitId,
+    });
   }
 
   /** Candidate/delivery/open funnel backed by NotificationDelivery truth. */
@@ -170,7 +174,8 @@ export class BehavioralEventService {
   ): Promise<void> {
     const delivery = await this.ensureDeliveryOwnership(userId, deliveryId);
 
-    // OPENED/DISMISSED/ACTED require DELIVERED first (funnel semantics).
+    // Funnel gates — EVERY interaction requires DELIVERED first; actions
+    // additionally require their predecessor step (spec §10).
     const deliveredEvent = await this.databaseSvc.behavioralEvent.findFirst({
       where: {
         userId,
@@ -179,37 +184,31 @@ export class BehavioralEventService {
       },
       select: { id: true, fingerprint: true },
     });
-
-    if (type === 'NOTIFICATION_OPENED' || type === 'NOTIFICATION_DISMISSED') {
-      if (!deliveredEvent) {
-        throw new BadRequestException('notification not yet marked delivered');
-      }
-      await this.record(userId, {
-        type,
-        fingerprint: `${delivery.fingerprint}:${type.split('_')[1].toLowerCase()}`,
-        notificationDeliveryId: deliveryId,
-      });
-      return;
+    if (!deliveredEvent) {
+      throw new BadRequestException('notification not yet marked delivered');
     }
 
-    // Action events require OPENED first.
-    const opened = await this.databaseSvc.behavioralEvent.findFirst({
-      where: {
-        userId,
-        notificationDeliveryId: deliveryId,
-        type:
-          type === 'NOTIFICATION_ACTION_COMPLETED'
-            ? 'NOTIFICATION_ACTION_STARTED'
-            : 'NOTIFICATION_OPENED',
-      },
-      select: { id: true },
-    });
-    if (!opened) {
-      throw new BadRequestException(
-        type === 'NOTIFICATION_ACTION_STARTED'
-          ? 'notification not yet opened'
-          : 'notification action not started',
-      );
+    const predecessorType: BehavioralEventType =
+      type === 'NOTIFICATION_OPENED' || type === 'NOTIFICATION_DISMISSED'
+        ? 'NOTIFICATION_DELIVERED' // already proven above
+        : type === 'NOTIFICATION_ACTION_STARTED'
+          ? 'NOTIFICATION_OPENED'
+          : 'NOTIFICATION_ACTION_STARTED';
+
+    if (predecessorType !== 'NOTIFICATION_DELIVERED') {
+      const predecessor = await this.databaseSvc.behavioralEvent.findFirst({
+        where: {
+          userId,
+          notificationDeliveryId: deliveryId,
+          type: predecessorType,
+        },
+        select: { id: true },
+      });
+      if (!predecessor) {
+        throw new BadRequestException(
+          `notification has not reached ${predecessorType} yet`,
+        );
+      }
     }
     await this.record(userId, {
       type,

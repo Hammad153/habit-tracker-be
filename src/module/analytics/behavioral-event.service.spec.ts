@@ -128,14 +128,18 @@ describe('notification funnel — delivery correlation (IDOR-safe)', () => {
     const { svc, db } = makeDeps();
     // DELIVERED:
     await svc.recordDelivered('u1', 'del-1', 'overload:u1:2026-08-17');
-    // OPENED (DELIVERED exists now):
-    db.behavioralEvent.findFirst.mockResolvedValueOnce({ id: 'd1', fingerprint: 'overload:u1:2026-08-17' });
+    // Each interaction checks DELIVERED first, then its predecessor step.
+    const deliveredRow = { id: 'd1', fingerprint: 'overload:u1:2026-08-17' };
+    const gate = (id: string) => {
+      db.behavioralEvent.findFirst
+        .mockResolvedValueOnce(deliveredRow) // DELIVERED gate
+        .mockResolvedValueOnce({ id });      // predecessor gate
+    };
+    gate('d-open'); // OPENED: predecessor = DELIVERED
     await svc.recordNotificationInteraction('u1', 'del-1', 'NOTIFICATION_OPENED');
-    // ACTION_STARTED requires OPENED — provide it:
-    db.behavioralEvent.findFirst.mockResolvedValueOnce({ id: 'o1' });
+    gate('o-start'); // ACTION_STARTED: predecessor = OPENED
     await svc.recordNotificationInteraction('u1', 'del-1', 'NOTIFICATION_ACTION_STARTED');
-    // ACTION_COMPLETED requires ACTION_STARTED — provide it:
-    db.behavioralEvent.findFirst.mockResolvedValueOnce({ id: 's1' });
+    gate('s-done'); // ACTION_COMPLETED: predecessor = ACTION_STARTED
     await svc.recordNotificationInteraction('u1', 'del-1', 'NOTIFICATION_ACTION_COMPLETED');
 
     const types = db.behavioralEvent.create.mock.calls.map(
@@ -149,12 +153,13 @@ describe('notification funnel — delivery correlation (IDOR-safe)', () => {
     ]);
   });
 
-  it('ACTION_STARTED without OPENED → rejected', async () => {
+  it('ACTION_STARTED without OPENED → rejected at the OPENED gate', async () => {
     const { svc, db } = makeDeps();
+    // Delivery exists (owned), but no DELIVERED/OPENED events recorded yet.
     db.behavioralEvent.findFirst.mockResolvedValue(null);
     await expect(
       svc.recordNotificationInteraction('u1', 'del-1', 'NOTIFICATION_ACTION_STARTED'),
-    ).rejects.toThrow(/not yet opened/);
+    ).rejects.toThrow(/NOTIFICATION_DELIVERED|NOTIFICATION_OPENED/);
   });
 });
 
@@ -167,7 +172,7 @@ describe('proposal lifecycle events — state machine respected', () => {
     ).rejects.toThrow(/Proposal not found/);
   });
 
-  it('ACCEPTED event requires ACCEPTED status; REJECTED after ACCEPTED impossible', async () => {
+  it('ACCEPTED event requires ACCEPTED status; REJECTED event requires REJECTED status', async () => {
     const { svc, db } = makeDeps();
     db.habitAdjustmentProposal.findFirst.mockResolvedValue({
       id: 'p1', habitId: 'h1', status: 'PENDING',
@@ -175,13 +180,21 @@ describe('proposal lifecycle events — state machine respected', () => {
     await expect(
       svc.recordProposalEvent('u1', 'p1', 'ADAPTIVE_PROPOSAL_ACCEPTED'),
     ).rejects.toThrow(/not in ACCEPTED state/);
+    await expect(
+      svc.recordProposalEvent('u1', 'p1', 'ADAPTIVE_PROPOSAL_REJECTED'),
+    ).rejects.toThrow(/not in REJECTED state/);
+  });
 
+  it('REJECTED ledger event cannot follow a prior ACCEPTED ledger event', async () => {
+    const { svc, db } = makeDeps();
+    // Defense-in-depth: even if the row state were manually flipped back,
+    // the immutable ledger blocks the contradictory observation.
     db.habitAdjustmentProposal.findFirst.mockResolvedValue({
       id: 'p1', habitId: 'h1', status: 'REJECTED',
     });
-    db.behavioralEvent.findFirst.mockResolvedValue({ id: 'rej' }); // prior REJECTED event
+    db.behavioralEvent.findFirst.mockResolvedValue({ id: 'acc' }); // prior ACCEPTED
     await expect(
-      svc.recordProposalEvent('u1', 'p1', 'ADAPTIVE_PROPOSAL_ACCEPTED'),
+      svc.recordProposalEvent('u1', 'p1', 'ADAPTIVE_PROPOSAL_REJECTED'),
     ).rejects.toThrow(/impossible transition/);
   });
 
