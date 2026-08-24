@@ -90,7 +90,9 @@ export class HabitService {
     const habitData = { ...(data ?? {}) } as Record<string, unknown>;
     delete habitData.userId;
 
-    return this.databaseSvc.$transaction(async (tx) => {
+    // Remote DB latency: explicit budgets avoid default-2s maxWait failures.
+    return this.databaseSvc.$transaction(
+      async (tx) => {
       const { identityIds, ...rest } = habitData;
 
       const processedData = {
@@ -116,7 +118,9 @@ export class HabitService {
       }
 
       return habit;
-    });
+      },
+      { maxWait: 10_000, timeout: 30_000 },
+    );
   }
 
   public async updateHabit(
@@ -128,7 +132,9 @@ export class HabitService {
     const habitData = { ...(data ?? {}) } as Record<string, unknown>;
     delete habitData.userId;
 
-    return this.databaseSvc.$transaction(async (tx) => {
+    // Remote DB latency: explicit budgets avoid default-2s maxWait failures.
+    return this.databaseSvc.$transaction(
+      async (tx) => {
       const { identityIds, ...rest } = habitData;
 
       const processedData = this.parseHabitDates(
@@ -159,7 +165,9 @@ export class HabitService {
         where: { id },
         data: processedData,
       });
-    });
+      },
+      { maxWait: 10_000, timeout: 30_000 },
+    );
   }
 
   /**
