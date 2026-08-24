@@ -1,52 +1,37 @@
-import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { Role } from '@prisma/client';
+import { ROLES_KEY } from '../core/decorators/roles.decorator';
+import type { JwtRolePayload } from '../module/auth/auth.interface';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    //const requiredRoles = this.reflector.getAllAndOverride<[]>( [
-    //  context.getHandler(),
-    //  context.getClass(),
-    //]);
-
-    // If no @Roles decorator is present, allow access
-    //if (!requiredRoles || requiredRoles.length === 0) {
-    //  return true;
-    //}
+    // No @Roles() metadata → route is not role-restricted.
+    const requiredRoles = this.reflector.getAllAndOverride<Role[]>(
+      ROLES_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    if (!requiredRoles || requiredRoles.length === 0) return true;
 
     const { user } = context.switchToHttp().getRequest();
-
-    // If no user is present (AuthGuard didn't run or public route), allow through
-    // The AuthGuard handles authentication; RolesGuard only handles authorization
+    // AuthGuard guarantees an authenticated user on non-public routes.
     if (!user) {
-      return true;
+      throw new ForbiddenException('User has no assigned role');
     }
 
-    // Support both singular `role` (string) and `roles` (string[]) shaped payloads.
-    //const userRole = (user.role as Role) ?? undefined;
-    //const userRolesArray: Role[] | undefined =
-    //  Array.isArray(user.roles) && user.roles.length > 0
-    //    ? (user.roles as Role[])
-    //    : userRole
-    //      ? [userRole]
-    //      : undefined;
+    const payload = user as JwtRolePayload;
+    // Pre-3.8 tokens carry no role claim — resolve to USER (documented).
+    const effectiveRole: Role =
+      payload.role === 'ADMIN' ? 'ADMIN' : 'USER';
 
-    //    if (!userRolesArray) {
-    //      throw new ForbiddenException('User has no assigned roles');
-    //    }
-    //
-    //    const hasRequiredRole = requiredRoles.some((role) =>
-    //      userRolesArray.includes(role),
-    //    );
-
-    //if (!hasRequiredRole) {
-    //  throw new ForbiddenException(
-    //    `Access denied. Required roles: ${requiredRoles.join(', ')}. Your role: join(', ')}`,
-    //  );
-    //}
-
+    if (!requiredRoles.includes(effectiveRole)) {
+      throw new ForbiddenException(
+        `Access denied. Required roles: ${requiredRoles.join(', ')}. Your role: ${effectiveRole}`,
+      );
+    }
     return true;
   }
 }

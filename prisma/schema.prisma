@@ -4,6 +4,11 @@
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
+enum Role {
+  USER
+  ADMIN
+}
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -85,6 +90,7 @@ model User {
   id                       String                    @id @default(cuid())
   name                     String
   email                    String                    @unique
+  role                     Role                      @default(USER)
   password                 String
   refreshToken             String?
   resetToken               String?

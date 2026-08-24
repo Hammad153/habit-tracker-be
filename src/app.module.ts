@@ -9,6 +9,7 @@ import { MyLoggerModule } from '../log/my-logger/my-logger.module';
 import { MyLoggerService } from '../log/my-logger/my-logger.service';
 import { AuthModule } from './module/auth/auth.module';
 import { AuthGuard } from './module/auth/auth.guard';
+import { RolesGuard } from './guard/roles.guard';
 import { ProfileModule } from './module/profile/profile.module';
 import { AwardsModule } from './module/awards/awards.module';
 import { TimelineModule } from './module/timeline/timeline.module';
@@ -76,6 +77,8 @@ import { configValidationSchema } from './core/config/config.validation';
     // Global authentication: every route requires a valid JWT unless marked
     // with @Public(). Reuses the instance exported by AuthModule.
     { provide: APP_GUARD, useExisting: AuthGuard },
+    // Order matters: Throttler -> AuthGuard -> RolesGuard -> Controller.
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

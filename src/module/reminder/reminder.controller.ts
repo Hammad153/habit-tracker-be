@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import {
   Controller,
   Get,
@@ -7,7 +8,6 @@ import {
   Body,
   Param,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
 import { ReminderService } from './reminder.service';
 import {
   CreateReminderDto,
@@ -15,6 +15,8 @@ import {
   RegisterPushTokenDto,
 } from './dto/reminder.dto';
 import { CurrentUser } from '../../core/decorators/current-user.decorator';
+import { Roles } from '../../core/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 
 @ApiTags('Reminders')
 @Controller('reminder')
@@ -51,6 +53,8 @@ export class ReminderController {
     return this.reminderSvc.registerPushToken(userId, pushToken);
   }
 
+  /** Phase 3.8 — cross-user data is ADMIN-only. */
+  @Roles(Role.ADMIN)
   @Get('streak-at-risk')
   getStreakAtRiskUsers() {
     return this.reminderSvc.findStreakAtRiskUsers();

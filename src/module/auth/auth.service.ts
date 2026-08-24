@@ -250,6 +250,9 @@ If you didn't request a password reset, please ignore this email or contact supp
       {
         sub: user.id,
         email: user.email,
+        // Phase 3.8 — server-issued role claim. Old tokens without it are
+        // treated as USER by the RolesGuard (documented behavior).
+        role: user.role,
         token_type: 'access',
       },
       {
@@ -262,6 +265,7 @@ If you didn't request a password reset, please ignore this email or contact supp
       {
         sub: user.id,
         email: user.email,
+        role: user.role,
         token_type: 'refresh',
       },
       {

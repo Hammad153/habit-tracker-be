@@ -1,4 +1,5 @@
 import { PrismaClient, BadgeType } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 import { prismaClientOptions } from '../src/core/database/prisma-client-options';
 
 const prisma = new PrismaClient(prismaClientOptions);
@@ -151,6 +152,7 @@ async function main() {
   }
   console.log(`Seeded ${rewardItems.length} reward shop items.`);
 
+  await seedAdminFromEnv();
   console.log('Seed completed!');
 }
 
@@ -162,3 +164,29 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
+// ---------------------------------------------------------------------------
+// Phase 3.8 — environment-gated development admin.
+// Only runs when BOTH ADMIN_EMAIL and ADMIN_PASSWORD are provided.
+// Never hardcodes credentials; never logs the password; idempotent upsert.
+// ---------------------------------------------------------------------------
+async function seedAdminFromEnv() {
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD;
+  if (!email || !password) {
+    console.log('[seed] ADMIN_EMAIL/ADMIN_PASSWORD not set — skipping admin seed');
+    return;
+  }
+  const hashed = await bcrypt.hash(password, 10);
+  await prisma.user.upsert({
+    where: { email },
+    update: { role: 'ADMIN' }, // preserve unrelated fields on existing users
+    create: {
+      name: 'Administrator',
+      email,
+      password: hashed,
+      role: 'ADMIN',
+    },
+  });
+  console.log(`[seed] admin ensured for ${email} (role=ADMIN)`);
+}
