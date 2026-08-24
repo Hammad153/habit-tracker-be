@@ -1,6 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { BehavioralEventType, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../core/database/database.service';
+import {
+  EVENT_RETENTION_DAYS,
+  PRUNE_BATCH_SIZE,
+  PRUNE_MAX_BATCHES,
+} from './admin/admin.constants';
 
 /**
  * Phase 4.1 — behavioral intent/outcome event ledger.
@@ -34,7 +39,59 @@ export interface RecordEventInput {
 
 @Injectable()
 export class BehavioralEventService {
+  private readonly logger = new Logger(BehavioralEventService.name);
+
   constructor(private readonly databaseSvc: DatabaseService) {}
+
+  /**
+   * Phase 4.3 — retention pruning. Bounded, idempotent, retry-safe.
+   *
+   * Deletes ONLY events strictly older than the retention boundary
+   * (EVENT_RETENTION_DAYS before "now", computed at invocation time).
+   * Recent events inside ANY analytics window can never be touched because
+   * the boundary (365d) far exceeds the longest query window (180d).
+   *
+   * Production note: there is NO in-app scheduler (serverless). Invoke this
+   * from the deployment platform's scheduled function (e.g. Vercel Cron)
+   * hitting an ADMIN-only wrapper once daily; repeated invocations are safe.
+   */
+  public async pruneExpiredEvents(referenceNow?: Date): Promise<{
+    deletedTotal: number;
+    batches: number;
+    cutoffDate: string;
+  }> {
+    const now = referenceNow ?? new Date();
+    const cutoff = new Date(
+      now.getTime() - EVENT_RETENTION_DAYS * 86_400_000,
+    );
+    let deletedTotal = 0;
+    let batches = 0;
+
+    while (batches < PRUNE_MAX_BATCHES) {
+      const doomed = await this.databaseSvc.behavioralEvent.findMany({
+        where: { occurredAt: { lt: cutoff } },
+        select: { id: true },
+        take: PRUNE_BATCH_SIZE,
+        orderBy: { occurredAt: 'asc' },
+      });
+      if (doomed.length === 0) break;
+      const res = await this.databaseSvc.behavioralEvent.deleteMany({
+        where: { id: { in: doomed.map((d) => d.id) } },
+      });
+      deletedTotal += res.count;
+      batches += 1;
+      if (res.count < PRUNE_BATCH_SIZE) break;
+    }
+
+    if (deletedTotal > 0) {
+      this.logger.log({ outcome: 'retention-prune', deletedTotal, batches });
+    }
+    return {
+      deletedTotal,
+      batches,
+      cutoffDate: cutoff.toISOString().slice(0, 10),
+    };
+  }
 
   /** Internal/server-authorized recording. Idempotent by unique constraint. */
   public async record(userId: string, input: RecordEventInput): Promise<{ id: string; deduplicated: boolean }> {

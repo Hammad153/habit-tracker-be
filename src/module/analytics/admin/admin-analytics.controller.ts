@@ -1,9 +1,11 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiForbiddenResponse, ApiPropertyOptional, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger';
 import { Roles } from '../../../core/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminDashboardService } from './admin-dashboard.service';
+import { Throttle } from '@nestjs/throttler';
+import { BehavioralEventService } from '../behavioral-event.service';
 import { AdminEffectivenessQueryDto } from './dto/admin-effectiveness-query.dto';
 
 class DashboardPeriodQueryDto {
@@ -27,7 +29,20 @@ export class AdminAnalyticsController {
   constructor(
     private readonly adminAnalyticsSvc: AdminAnalyticsService,
     private readonly dashboardSvc: AdminDashboardService,
+    private readonly behavioralEvents: BehavioralEventService,
   ) {}
+
+  /**
+   * Phase 4.3 — retention pruning. Bounded, idempotent, retry-safe.
+   * Intended to be invoked by a deployment-platform scheduled function.
+   * NOT exposed to normal users; hard-throttled even for admins.
+   */
+  @Roles(Role.ADMIN)
+  @Throttle({ short: { limit: 1, ttl: 60_000 }, long: { limit: 4, ttl: 3_600_000 } })
+  @Post('events/prune')
+  pruneEvents() {
+    return this.behavioralEvents.pruneExpiredEvents();
+  }
 
   /**
    * Phase 3.9 — aggregate behavioral intelligence dashboard.
