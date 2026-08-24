@@ -20,15 +20,6 @@ const INTERVENTION_TYPES: ReadonlySet<BehavioralEventType> = new Set([
   'INTERVENTION_ACTION_COMPLETED',
 ] as BehavioralEventType[]);
 
-const NOTIFICATION_TYPES: ReadonlySet<BehavioralEventType> = new Set([
-  'NOTIFICATION_CANDIDATE_GENERATED',
-  'NOTIFICATION_DELIVERED',
-  'NOTIFICATION_OPENED',
-  'NOTIFICATION_DISMISSED',
-  'NOTIFICATION_ACTION_STARTED',
-  'NOTIFICATION_ACTION_COMPLETED',
-] as BehavioralEventType[]);
-
 export interface RecordEventInput {
   type: BehavioralEventType;
   fingerprint: string;

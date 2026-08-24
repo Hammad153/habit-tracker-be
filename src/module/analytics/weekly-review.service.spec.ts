@@ -87,13 +87,18 @@ const makeDeps = () => {
     generateRawText: jest.fn().mockResolvedValue(VALID_LANGUAGE),
     generateCoachResponse: jest.fn(),
   };
+  const behavioralEvents = {
+    recordWeeklyReviewRegenerated: jest.fn().mockResolvedValue(undefined),
+    recordWeeklyReviewViewed: jest.fn().mockResolvedValue(undefined),
+  };
   const svc = new WeeklyReviewService(
     db as unknown as DatabaseService,
     analytics as unknown as HabitAnalyticsService,
     identity as unknown as IdentityService,
+    behavioralEvents as never,
     aiProvider as unknown as AiProvider,
   );
-  return { svc, db, analytics, identity, aiProvider };
+  return { svc, db, analytics, identity, aiProvider, behavioralEvents };
 };
 
 describe('WeeklyReviewService — preferences & validation', () => {

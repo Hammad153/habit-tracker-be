@@ -6,12 +6,6 @@ import {
   BehavioralEventService,
 } from './behavioral-event.service';
 
-class ActionCompletedDto {
-  @IsString()
-  @Length(6, 64)
-  habitId!: string; // server verifies a real completion for this habit
-}
-
 class WeeklyReviewViewedDto {
   @IsString()
   @Length(10, 10)
