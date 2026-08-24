@@ -2,7 +2,6 @@ import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { AI_PROVIDER } from '../../../core/ai/ai-provider.interface';
 import type { AiProvider } from '../../../core/ai/ai-provider.interface';
 import {
-  DEFAULT_ADMIN_RANGE_DAYS,
   MAX_ADMIN_RANGE_DAYS,
   MIN_AGGREGATE_SAMPLE,
   SUPPRESSED_REASON,
@@ -245,9 +244,10 @@ export class AdminDashboardService {
       const parsed = JSON.parse(
         raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1),
       ) as { headline?: unknown; message?: unknown; caution?: unknown };
+      const controlChars = new RegExp(`[\\u0000-\\u001f]`, 'g');
       const str = (v: unknown, max: number): string =>
         typeof v === 'string'
-          ? v.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, max)
+          ? v.replace(controlChars, ' ').trim().slice(0, max)
           : '';
       const headline = str(parsed.headline, 90) || base.headline;
       const message = str(parsed.message, 480) || base.message;
