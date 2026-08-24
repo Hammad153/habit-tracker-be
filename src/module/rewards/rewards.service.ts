@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { INTERACTIVE_TX_OPTIONS } from '../../core/database/transaction-options';
 import { CompletionKind, Prisma, RewardTransactionType } from '@prisma/client';
 import type { RewardLedger } from '@prisma/client';
 import { DatabaseService } from '../../core/database/database.service';
@@ -234,7 +235,7 @@ export class RewardsService {
         })`,
       );
       return { adjustedBy: difference };
-    });
+    }, INTERACTIVE_TX_OPTIONS);
   }
 
   public async listTransactions(

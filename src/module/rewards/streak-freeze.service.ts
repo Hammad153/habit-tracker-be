@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { INTERACTIVE_TX_OPTIONS } from '../../core/database/transaction-options';
 import { DatabaseService } from '../../core/database/database.service';
 import { isScheduledOnDate } from '../../core/utils/schedule.utils';
 import { STREAK_FREEZE_COST } from '../../core/utils/evidence.constants';
@@ -105,6 +106,6 @@ export class StreakFreezeService {
         }
         throw err;
       }
-    });
+    }, INTERACTIVE_TX_OPTIONS);
   }
 }

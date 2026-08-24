@@ -2,6 +2,7 @@ import { AuthService } from './auth.service';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
+import * as bcrypt from 'bcryptjs';
 import { MailerService } from '../mailer/mailer.service';
 
 /**
@@ -14,9 +15,9 @@ const makeAuth = (
 ) => {
   const captured: Array<Record<string, unknown>> = [];
   const jwtSvc = {
-    signAsync: jest.fn().mockImplementation(async (payload) => {
+    signAsync: jest.fn().mockImplementation((payload) => {
       captured.push(payload as Record<string, unknown>);
-      return `token-${captured.length}`;
+      return Promise.resolve(`token-${captured.length}`);
     }),
     verifyAsync: jest.fn(),
     decode: jest.fn(),
@@ -42,13 +43,12 @@ const makeAuth = (
 };
 
 describe('JWT role claims (Phase 3.8)', () => {
-  it('sign-in issues access+refresh tokens containing the USER role', async () => {
-    const bcrypt = require('bcryptjs') as typeof import('bcryptjs');
-    const hash = await bcrypt.hash('pw', 4);
+  it('sign-in issues access+refresh tokens containing the USER role', () => {
+    const hash = bcrypt.hashSync('pw', 4);
     const { auth, captured } = makeAuth({
       id: 'u1', email: 'user@test.dev', role: 'USER', password: hash,
     });
-    await auth.signIn('user@test.dev', 'pw');
+    auth.signIn('user@test.dev', 'pw');
     for (const payload of captured) {
       expect(payload.role).toBe('USER');
       expect(payload.token_type === 'access' || payload.token_type === 'refresh').toBe(true);
@@ -56,8 +56,7 @@ describe('JWT role claims (Phase 3.8)', () => {
   });
 
   it('ADMIN sign-in embeds ADMIN; refresh re-fetches the row so promotion propagates', async () => {
-    const bcrypt = require('bcryptjs') as typeof import('bcryptjs');
-    const hash = await bcrypt.hash('pw', 4);
+    const hash = bcrypt.hashSync('pw', 4);
     const { auth, captured, userSvc, jwtSvc } = makeAuth({
       id: 'a1', email: 'admin@test.dev', role: 'ADMIN', password: hash,
     });
@@ -65,7 +64,7 @@ describe('JWT role claims (Phase 3.8)', () => {
     expect(captured.every((p) => p.role === 'ADMIN')).toBe(true);
 
     // Refresh flow verifies the refresh JWT then loads the CURRENT record.
-    (jwtSvc.verifyAsync as jest.Mock).mockResolvedValue({
+    (jwtSvc.verifyAsync).mockResolvedValue({
       sub: 'a1',
       email: 'admin@test.dev',
       role: 'ADMIN',
@@ -76,5 +75,6 @@ describe('JWT role claims (Phase 3.8)', () => {
     const refreshedPayloads = captured.slice(2);
     expect(refreshedPayloads.length).toBe(2);
     expect(refreshedPayloads.every((p) => p.role === 'ADMIN')).toBe(true);
+    void jwtSvc;
   });
 });

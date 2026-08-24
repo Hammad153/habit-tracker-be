@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { INTERACTIVE_TX_OPTIONS } from '../../core/database/transaction-options';
 import { DatabaseService } from '../../core/database/database.service';
 import {
   BudgetAllocationDto,
@@ -437,7 +438,7 @@ export class BudgetService {
         }
       }
       return budget;
-    });
+    }, INTERACTIVE_TX_OPTIONS);
     return this.withBudgetCalculations(userId, updated);
   }
 
@@ -458,7 +459,7 @@ export class BudgetService {
         });
       }
       return deleted;
-    });
+    }, INTERACTIVE_TX_OPTIONS);
   }
 
   async expenses(userId: string, startDate?: string, endDate?: string) {

@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { INTERACTIVE_TX_OPTIONS } from '../../core/database/transaction-options';
 import { DatabaseService } from '../../core/database/database.service';
 import { UpdateCoachPreferencesDto } from './dto/coach-preferences.dto';
 import * as bcrypt from 'bcryptjs';
@@ -133,6 +134,7 @@ export class ProfileService {
   public async addExperience(userId: string, amount: number) {
     return this.databaseSvc.$transaction((tx) =>
       this.addExperienceTx(tx, userId, amount),
+      INTERACTIVE_TX_OPTIONS,
     );
   }
 

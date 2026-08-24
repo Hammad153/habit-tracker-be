@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { INTERACTIVE_TX_OPTIONS } from '../../core/database/transaction-options';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../core/database/database.service';
 import { AwardsService } from '../awards/awards.service';
@@ -334,7 +335,7 @@ export class DailyPlanService {
       });
       if (Array.isArray(data.items)) await this.replaceItems(userId, saved.id, data.items, tx);
       return tx.dailyPlan.findUniqueOrThrow({ where: { id: saved.id }, include: this.planInclude });
-    });
+    }, INTERACTIVE_TX_OPTIONS);
     return this.mapPlan(plan);
   }
 
@@ -351,7 +352,7 @@ export class DailyPlanService {
       });
       if (Array.isArray(data.items)) await this.replaceItems(userId, saved.id, data.items, tx);
       return tx.dailyPlan.findUniqueOrThrow({ where: { id: saved.id }, include: this.planInclude });
-    });
+    }, INTERACTIVE_TX_OPTIONS);
     return this.mapPlan(plan);
   }
 
@@ -420,7 +421,7 @@ export class DailyPlanService {
         include: this.taskInclude,
       });
       return { task, ...syncResult };
-    });
+    }, INTERACTIVE_TX_OPTIONS);
 
     if (sync.xpDelta) await this.profileSvc.addExperience(userId, sync.xpDelta);
     if (sync.shouldCheckAwards) await this.awardsSvc.checkAndAwardBadges(userId);
@@ -440,6 +441,7 @@ export class DailyPlanService {
       taskIds.map((id, sortOrder) =>
         this.databaseSvc.dailyPlanTask.update({ where: { id }, data: { sortOrder } }),
       ),
+      INTERACTIVE_TX_OPTIONS,
     );
     return { success: true };
   }
@@ -455,7 +457,7 @@ export class DailyPlanService {
       });
       await Promise.all(remaining.map((item, sortOrder) => tx.dailyPlanTask.update({ where: { id: item.id }, data: { sortOrder } })));
       return removed;
-    });
+    }, INTERACTIVE_TX_OPTIONS);
     if (removedCompletion) await this.profileSvc.addExperience(userId, -XP_PER_COMPLETION);
     return { success: true };
   }

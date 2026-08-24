@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { INTERACTIVE_TX_OPTIONS } from '../../core/database/transaction-options';
 import { DatabaseService } from '../../core/database/database.service';
 
 export interface ShopListItem {
@@ -121,6 +122,6 @@ export class RewardShopService {
         redemption: { id: redemptionId, itemId },
         remainingCoins: updated.coins,
       };
-    });
+    }, INTERACTIVE_TX_OPTIONS);
   }
 }

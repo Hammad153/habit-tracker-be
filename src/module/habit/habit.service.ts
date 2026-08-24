@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CompletionKind, Completion, Prisma, Habit } from '@prisma/client';
+import { INTERACTIVE_TX_OPTIONS } from '../../core/database/transaction-options';
 import { DatabaseService } from '../../core/database/database.service';
 import { ProfileService } from '../profile/profile.service';
 import { AwardsService } from '../awards/awards.service';
@@ -119,7 +120,7 @@ export class HabitService {
 
       return habit;
       },
-      { maxWait: 10_000, timeout: 30_000 },
+      INTERACTIVE_TX_OPTIONS,
     );
   }
 
@@ -166,7 +167,7 @@ export class HabitService {
         data: processedData,
       });
       },
-      { maxWait: 10_000, timeout: 30_000 },
+      INTERACTIVE_TX_OPTIONS,
     );
   }
 
