@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
@@ -169,6 +170,9 @@ export class CreateHabitDto {
     description:
       'Implementation intention time, local HH:mm. Part of "I will [behavior] at [time] in [location]".',
   })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? (value.trim() === '' ? undefined : value.trim()) : value,
+  )
   @IsOptional()
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
     message: 'scheduledTime must be formatted as HH:mm',
