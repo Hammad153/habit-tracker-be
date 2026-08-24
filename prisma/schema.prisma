@@ -9,6 +9,26 @@ enum Role {
   ADMIN
 }
 
+enum BehavioralEventType {
+  INTERVENTION_GENERATED
+  INTERVENTION_VIEWED
+  INTERVENTION_DISMISSED
+  INTERVENTION_ACTION_STARTED
+  INTERVENTION_ACTION_COMPLETED
+  ADAPTIVE_PROPOSAL_GENERATED
+  ADAPTIVE_PROPOSAL_VIEWED
+  ADAPTIVE_PROPOSAL_ACCEPTED
+  ADAPTIVE_PROPOSAL_REJECTED
+  NOTIFICATION_CANDIDATE_GENERATED
+  NOTIFICATION_DELIVERED
+  NOTIFICATION_OPENED
+  NOTIFICATION_DISMISSED
+  NOTIFICATION_ACTION_STARTED
+  NOTIFICATION_ACTION_COMPLETED
+  WEEKLY_REVIEW_VIEWED
+  WEEKLY_REVIEW_REGENERATED
+}
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -135,6 +155,27 @@ model User {
   updatedAt                DateTime                  @updatedAt
   habitAdjustmentProposals HabitAdjustmentProposal[]
   notificationDeliveries   NotificationDelivery[]
+  behavioralEvents         BehavioralEvent[]
+}
+
+/// Phase 4.1 — immutable behavioral intent/outcome event ledger.
+model BehavioralEvent {
+  id                     String              @id @default(cuid())
+  userId                 String
+  user                   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habitId                String?
+  type                   BehavioralEventType
+  fingerprint            String
+  occurredAt             DateTime            @default(now())
+  proposalId             String?
+  notificationDeliveryId String?
+  metadata               Json?
+
+  @@unique([userId, fingerprint, type])
+  @@index([userId, occurredAt])
+  @@index([habitId, occurredAt])
+  @@index([type, occurredAt])
+  @@index([fingerprint])
 }
 
 /// Phase 3.7 — behavioral-notification idempotency + cooldown ledger.
