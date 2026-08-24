@@ -15,10 +15,6 @@ class DashboardPeriodQueryDto {
   to?: string;
 }
 
-/**
- * Phase 3.8 — ADMIN-only behavioral intelligence.
- * Aggregate, privacy-floored, read-only. No AI, no threshold mutation.
- */
 @ApiTags('Admin Analytics')
 @ApiBearerAuth()
 @Roles(Role.ADMIN)
@@ -32,11 +28,6 @@ export class AdminAnalyticsController {
     private readonly behavioralEvents: BehavioralEventService,
   ) {}
 
-  /**
-   * Phase 4.3 — retention pruning. Bounded, idempotent, retry-safe.
-   * Intended to be invoked by a deployment-platform scheduled function.
-   * NOT exposed to normal users; hard-throttled even for admins.
-   */
   @Roles(Role.ADMIN)
   @Throttle({ short: { limit: 1, ttl: 60_000 }, long: { limit: 4, ttl: 3_600_000 } })
   @Post('events/prune')
@@ -44,10 +35,6 @@ export class AdminAnalyticsController {
     return this.behavioralEvents.pruneExpiredEvents();
   }
 
-  /**
-   * Phase 3.9 — aggregate behavioral intelligence dashboard.
-   * Deterministic, privacy-floored, READ-ONLY. Zero AI calls on this route.
-   */
   @Get('dashboard')
   getDashboard(@Query() query: DashboardPeriodQueryDto) {
     return this.dashboardSvc.getDashboard(query.from, query.to);

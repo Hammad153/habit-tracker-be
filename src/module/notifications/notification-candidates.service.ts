@@ -9,7 +9,6 @@ import {
 } from '../../core/utils/adaptive-cadence.constants';
 import {
   evaluateCadence,
-  inQuietHours,
 } from '../../core/utils/adaptive-cadence.utils';
 import { buildBehaviorReport } from '../../core/utils/behavior-analytics.utils';
 import { BEHAVIOR_WINDOWS } from '../../core/utils/behavior.constants';
@@ -32,14 +31,6 @@ export interface NotificationCandidate {
   expiresAt: string; // ISO instant
 }
 
-/**
- * Phase 3.7 — deterministic notification candidates.
- *
- * Backend decides WHAT (analytics → decision → fingerprint); the existing
- * mobile reminder/local-notification layer decides WHEN/HOW. NVIDIA is NOT
- * consulted here: all copy derives from already-generated deterministic
- * reasons and fallback templates (spec §17/§18).
- */
 @Injectable()
 export class NotificationCandidatesService {
   private readonly logger = new Logger(NotificationCandidatesService.name);
@@ -434,7 +425,3 @@ const rank = (p: NotificationPriority): number =>
   p === 'URGENT' ? 0 : p === 'HIGH' ? 1 : p === 'NORMAL' ? 2 : 3;
 
 const weekBucket = (todayKey: string): string => mondayOf(todayKey);
-
-// Re-exported for tests that want to assert quiet-hour behavior end-to-end.
-export const __testing = { inQuietHours };
-void inQuietHours;
