@@ -20,6 +20,7 @@ import { SubscriptionModule } from './module/subscription/subscription.module';
 import { AnalyticsModule } from './module/analytics/analytics.module';
 import { InterventionModule } from './module/intervention/intervention.module';
 import { AiProviderModule } from './core/ai/ai-provider.module';
+import { NotificationsModule } from './module/notifications/notifications.module';
 import { ExportModule } from './module/export/export.module';
 import { ReminderModule } from './module/reminder/reminder.module';
 import { BudgetModule } from './module/budget/budget.module';
@@ -56,6 +57,7 @@ import { configValidationSchema } from './core/config/config.validation';
     AnalyticsModule,
     InterventionModule,
     AiProviderModule,
+    NotificationsModule,
     ExportModule,
     ReminderModule,
     BudgetModule,

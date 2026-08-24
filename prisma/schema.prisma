@@ -128,6 +128,24 @@ model User {
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   habitAdjustmentProposals HabitAdjustmentProposal[]
+  notificationDeliveries   NotificationDelivery[]
+}
+
+/// Phase 3.7 — behavioral-notification idempotency + cooldown ledger.
+model NotificationDelivery {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fingerprint String
+  type        String
+  status      String    @default("SURFACED") // SURFACED | EXPIRED
+  priority    String
+  dayKey      String // YYYY-MM-DD (user-local) the candidate surfaced
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, fingerprint])
+  @@index([userId, createdAt])
 }
 
 /// Phase 3.5 — user-approved adaptive habit adjustments (never auto-applied).
