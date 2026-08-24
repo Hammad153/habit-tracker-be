@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import * as fs from 'fs';
 import { AdminAnalyticsService } from './admin-analytics.service';
 import { DatabaseService } from '../../../core/database/database.service';
 
@@ -120,8 +121,7 @@ describe('AdminAnalyticsService — privacy floor & aggregates', () => {
     }
   });
 
-  it('zero NVIDIA surface exists in the admin layer', async () => {
-    const fs = await import('fs');
+  it('zero NVIDIA surface exists in the admin layer', () => {
     const src = fs.readFileSync(
       'src/module/analytics/admin/admin-analytics.service.ts',
       'utf8',
