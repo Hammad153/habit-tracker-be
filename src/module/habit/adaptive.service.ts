@@ -20,6 +20,7 @@ import {
 } from './adaptive-analysis.utils';
 import { HabitAnalyticsService } from '../analytics/habit-analytics.service';
 import { HabitService } from './habit.service';
+import { BehavioralEventService } from '../analytics/behavioral-event.service';
 
 class AdaptiveExplanationDto {
   @IsString()
@@ -76,6 +77,7 @@ export class AdaptiveService {
     private readonly databaseSvc: DatabaseService,
     private readonly habitAnalyticsSvc: HabitAnalyticsService,
     private readonly habitSvc: HabitService,
+    private readonly behavioralEvents: BehavioralEventService,
     @Inject(AI_PROVIDER) private readonly aiProvider: AiProvider,
   ) {}
 
@@ -143,6 +145,10 @@ export class AdaptiveService {
         evidence: analysis.evidence as unknown as object,
       },
     });
+    // Phase 4.1 — proposal lifecycle observation (server-authoritative).
+    await this.behavioralEvents
+      .recordProposalEvent(userId, created.id, 'ADAPTIVE_PROPOSAL_GENERATED')
+      .catch(() => undefined);
 
     const language = await this.explain(userId, habit.title, analysis);
     const updated = await this.databaseSvc.habitAdjustmentProposal.update({
@@ -409,6 +415,10 @@ export class AdaptiveService {
       where: { id: row.id },
       data: { status: 'REJECTED', resolvedAt: new Date() },
     });
+    // Phase 4.1 — authoritative lifecycle observation.
+    await this.behavioralEvents
+      .recordProposalEvent(userId, row.id, 'ADAPTIVE_PROPOSAL_REJECTED')
+      .catch(() => undefined);
     return this.replayWithConfirmation(row, null);
   }
 

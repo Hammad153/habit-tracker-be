@@ -134,13 +134,18 @@ const makeDeps = () => {
     }),
   };
   const aiProvider = { name: 'nvidia', model: null, generateRawText: jest.fn(), generateCoachResponse: jest.fn() };
+  const behavioralEvents = {
+    recordCandidateGenerated: jest.fn().mockResolvedValue(undefined),
+    recordDelivered: jest.fn().mockResolvedValue(undefined),
+  };
   const svc = new NotificationCandidatesService(
     db as unknown as DatabaseService,
     analytics as unknown as HabitAnalyticsService,
     overloadSvc as unknown as PortfolioOverloadService,
+    behavioralEvents as never,
     aiProvider as unknown as AiProvider,
   );
-  return { svc, db, analytics, overloadSvc, aiProvider };
+  return { svc, db, analytics, overloadSvc, aiProvider, behavioralEvents };
 };
 
 describe('notification candidates — surfacing & ranking', () => {

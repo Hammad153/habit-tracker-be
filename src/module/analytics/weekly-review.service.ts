@@ -12,6 +12,7 @@ import {
 } from '../../core/utils/week.utils';
 import { HabitAnalyticsService } from './habit-analytics.service';
 import { IdentityService } from '../identity/identity.service';
+import { BehavioralEventService } from './behavioral-event.service';
 import {
   WeeklyHabitEntry,
   WeeklyReviewFacts,
@@ -67,6 +68,7 @@ export class WeeklyReviewService {
     private readonly databaseSvc: DatabaseService,
     private readonly habitAnalyticsSvc: HabitAnalyticsService,
     private readonly identitySvc: IdentityService,
+    private readonly behavioralEvents: BehavioralEventService,
     @Inject(AI_PROVIDER) private readonly aiProvider: AiProvider,
   ) {}
 

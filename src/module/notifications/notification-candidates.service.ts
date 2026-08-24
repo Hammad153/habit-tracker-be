@@ -17,6 +17,7 @@ import { isScheduledOnDate, shiftDayKey } from '../../core/utils/schedule.utils'
 import { localDateKeyInZone, mondayOf } from '../../core/utils/week.utils';
 import { HabitAnalyticsService } from '../analytics/habit-analytics.service';
 import { PortfolioOverloadService } from '../analytics/portfolio-overload.service';
+import { BehavioralEventService } from '../analytics/behavioral-event.service';
 
 const MAX_CANDIDATES = 3;
 const SCAN_HABITS = 10;
@@ -47,6 +48,7 @@ export class NotificationCandidatesService {
     private readonly databaseSvc: DatabaseService,
     private readonly habitAnalyticsSvc: HabitAnalyticsService,
     private readonly overloadSvc: PortfolioOverloadService,
+    private readonly behavioralEvents: BehavioralEventService,
     @Inject(AI_PROVIDER) private readonly aiProvider: AiProvider,
   ) {}
 
@@ -333,6 +335,10 @@ export class NotificationCandidatesService {
       .map((c) => {
         const { interventionPriority, ...rest } = c;
         void interventionPriority;
+        // Phase 4.1 — CANDIDATE_GENERATED observation (best-effort).
+        this.behavioralEvents
+          .recordCandidateGenerated(userId, { fingerprint: c.fingerprint })
+          .catch(() => undefined);
         return rest;
       });
 
@@ -347,16 +353,20 @@ export class NotificationCandidatesService {
       type: NotificationType;
       priority: NotificationPriority;
     }>,
-  ): Promise<{ stored: number }> {
+  ): Promise<{
+    stored: number;
+    deliveries: Array<{ fingerprint: string; id: string }>;
+  }> {
     const user = await this.databaseSvc.user.findUnique({
       where: { id: userId },
       select: { timezone: true },
     });
     const todayKey = localDateKeyInZone(user?.timezone ?? null);
     let stored = 0;
+    const deliveries: Array<{ fingerprint: string; id: string }> = [];
     for (const item of fingerprints.slice(0, 20)) {
       try {
-        await this.databaseSvc.notificationDelivery.upsert({
+        const row = await this.databaseSvc.notificationDelivery.upsert({
           where: {
             userId_fingerprint: { userId, fingerprint: item.fingerprint },
           },
@@ -367,14 +377,17 @@ export class NotificationCandidatesService {
             priority: item.priority,
             dayKey: todayKey,
           },
-          update: {}, // idempotent replay
+          update: {}, // idempotent replay returns the existing row
         });
         stored += 1;
+        deliveries.push({ fingerprint: item.fingerprint, id: row.id });
+        // Phase 4.1 — DELIVERED ledger event keyed to the authoritative row.
+        await this.behavioralEvents.recordDelivered(userId, row.id, item.fingerprint);
       } catch (err) {
         this.logger.warn({ outcome: 'delivery-record-failed', reason: String(err).slice(0, 40) });
       }
     }
-    return { stored };
+    return { stored, deliveries };
   }
 
   // -------------------------------------------------------------------------

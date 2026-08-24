@@ -47,10 +47,16 @@ const makeDeps = () => {
   };
   const habitSvc = { updateHabit: jest.fn().mockResolvedValue({ id: 'h1' }) };
   const aiProvider = { name: 'nvidia', model: null, generateRawText: jest.fn(), generateCoachResponse: jest.fn() };
+  const behavioralEvents = {
+    recordProposalEvent: jest.fn().mockResolvedValue(undefined),
+    recordInterventionGenerated: jest.fn().mockResolvedValue(undefined),
+    funnelCounts: jest.fn().mockResolvedValue({}),
+  };
   const svc = new AdaptiveService(
     db as unknown as DatabaseService,
     analytics as unknown as HabitAnalyticsService,
     habitSvc as unknown as HabitService,
+    behavioralEvents as never,
     aiProvider as unknown as AiProvider,
   );
   return { svc, db, analytics, habitSvc, aiProvider };

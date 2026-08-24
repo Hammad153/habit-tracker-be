@@ -90,11 +90,15 @@ const makeDeps = () => {
       Promise.resolve(baseMockReport()),
     ),
   };
+  const behavioralEvents = {
+    recordInterventionGenerated: jest.fn().mockResolvedValue(undefined),
+  };
   const svc = new InterventionService(
     db as unknown as DatabaseService,
     analytics as unknown as HabitAnalyticsService,
+    behavioralEvents as never,
   );
-  return { svc, db, analytics };
+  return { svc, db, analytics, behavioralEvents };
 };
 
 describe('InterventionService', () => {

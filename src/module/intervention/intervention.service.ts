@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { DatabaseService } from '../../core/database/database.service';
+import { BehavioralEventService } from '../analytics/behavioral-event.service';
 import { HabitAnalyticsService } from '../analytics/habit-analytics.service';
 import {
   buildDaySeries,
@@ -49,6 +50,7 @@ export class InterventionService {
   constructor(
     private readonly databaseSvc: DatabaseService,
     private readonly habitAnalyticsSvc: HabitAnalyticsService,
+    private readonly behavioralEvents: BehavioralEventService,
   ) {}
 
   /** Validates an optional client-supplied analysis date (YYYY-MM-DD). */
@@ -159,15 +161,23 @@ export class InterventionService {
     const evaluated = evaluateIntervention(report, ctx);
     if (!evaluated) return { intervention: null, context: ctx };
 
+    const fingerprint = InterventionService.fingerprint(
+      userId,
+      evaluated.type,
+      evaluated.sourceSignals,
+      todayKey,
+    );
+
+    // Phase 4.1 — server-side GENERATION observation (fire-and-forget; the
+    // intervention response itself is never blocked by ledger writes).
+    this.behavioralEvents
+      .recordInterventionGenerated(userId, { fingerprint, habitId })
+      .catch(() => undefined);
+
     return {
       intervention: {
         ...evaluated,
-        fingerprint: InterventionService.fingerprint(
-          userId,
-          evaluated.type,
-          evaluated.sourceSignals,
-          todayKey,
-        ),
+        fingerprint,
       },
       context: ctx,
     };
