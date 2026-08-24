@@ -35,9 +35,13 @@ describe('anti-escalation — role is never client-writable', () => {
       },
       { exposeUnsetFields: false },
     );
-    const errors = validateSync(dto as never, { whitelist: true });
-    expect(errors.map((e) => e.property)).toEqual(
-      expect.arrayContaining(['minSample', 'outcome', 'type']),
-    );
+    // whitelist strips unknown fields (no error needed) — the transformed
+    // instance must not carry any injection surface:
+    validateSync(dto as never, { whitelist: true });
+    const carried = dto as Record<string, unknown>;
+    expect(carried.minSample).toBeUndefined();
+    expect(carried.outcome).toBeUndefined();
+    expect(carried.type).toBeUndefined();
+    expect(Object.keys(carried).sort()).toEqual(['from', 'to']);
   });
 });

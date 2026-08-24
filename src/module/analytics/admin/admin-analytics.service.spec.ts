@@ -120,8 +120,9 @@ describe('AdminAnalyticsService — privacy floor & aggregates', () => {
     }
   });
 
-  it('zero NVIDIA surface exists in the admin layer', () => {
-    const src = require('fs').readFileSync(
+  it('zero NVIDIA surface exists in the admin layer', async () => {
+    const fs = await import('fs');
+    const src = fs.readFileSync(
       'src/module/analytics/admin/admin-analytics.service.ts',
       'utf8',
     );

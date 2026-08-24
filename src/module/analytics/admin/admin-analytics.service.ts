@@ -139,16 +139,6 @@ export class AdminAnalyticsService {
         }),
       ]);
 
-    const pickCount = (
-      groups: Array<Record<string, unknown> & { _count: { _all: number } }>,
-      key: string,
-      field: string,
-    ): number | SuppressedMetric => {
-      const match = groups.find((g) => g[key] === field || g[field] === field);
-      const n = match?._count?._all ?? 0;
-      return n >= MIN_AGGREGATE_SAMPLE ? n : { suppressed: true, reason: SUPPRESSED_REASON };
-    };
-
     const countOrSuppressed = (n: number) =>
       n >= MIN_AGGREGATE_SAMPLE ? n : { suppressed: true, reason: SUPPRESSED_REASON };
 
