@@ -42,9 +42,11 @@ describe('calculateFunnel — pairwise explicit denominators', () => {
       { label: 'actionStarted', count: 9 },
       { label: 'actionCompleted', count: 6 },
     ]);
-    expect(stages.map((s) => s.stepRate)).toEqual([
-      undefined, 0.75, 0.5, Number((6 / 9).toFixed(4)),
-    ]);
+    // 40→30 (75%), 30→15 (50%), 15→9 (60%), 9→6 (66.67%)
+    expect(stages[1].stepRate).toBe(0.75);
+    expect(stages[2].stepRate).toBe(0.5);
+    expect(stages[3].stepRate).toBeCloseTo(9 / 15, 4);
+    expect(stages[4].stepRate).toBeCloseTo(6 / 9, 4);
     expect(stages.every((s) => !s.suppressed)).toBe(true);
   });
 
