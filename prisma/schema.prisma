@@ -82,51 +82,79 @@ enum RewardItemStatus {
 }
 
 model User {
-  id                  String                  @id @default(cuid())
-  name                String
-  email               String                  @unique
-  password            String
-  refreshToken        String?
-  resetToken          String?
-  resetTokenExpiry    DateTime?
-  avatar              String?
-  pushToken           String?
+  id                       String                    @id @default(cuid())
+  name                     String
+  email                    String                    @unique
+  password                 String
+  refreshToken             String?
+  resetToken               String?
+  resetTokenExpiry         DateTime?
+  avatar                   String?
+  pushToken                String?
   // IANA timezone (e.g. "Asia/Karachi") used ONLY for behavioral analytics
   // (time-of-day windows). Historical completion dates are never reinterpreted.
-  timezone            String?
+  timezone                 String?
   // Phase 3.4 — persistent coach preferences (safe defaults for existing users).
-  coachEnabled        Boolean                 @default(true)
-  aiCoachEnabled      Boolean                 @default(true)
-  coachTone           String                  @default("BALANCED") // ENCOURAGING|DIRECT|CALM|CHALLENGING|BALANCED
-  coachFrequency      String                  @default("STANDARD") // MINIMAL|STANDARD|FREQUENT
-  weeklyReviewEnabled Boolean                 @default(true)
-  level               Int                     @default(1)
-  xp                  Int                     @default(0)
+  coachEnabled             Boolean                   @default(true)
+  aiCoachEnabled           Boolean                   @default(true)
+  coachTone                String                    @default("BALANCED") // ENCOURAGING|DIRECT|CALM|CHALLENGING|BALANCED
+  coachFrequency           String                    @default("STANDARD") // MINIMAL|STANDARD|FREQUENT
+  weeklyReviewEnabled      Boolean                   @default(true)
+  level                    Int                       @default(1)
+  xp                       Int                       @default(0)
   // Cached virtual-currency balance. The RewardLedger is the source of truth;
   // this value must only change together with a ledger entry (same transaction).
-  coins               Int                     @default(0)
-  longestStreak       Int                     @default(0)
-  totalHabits         Int                     @default(0)
-  completionRate      Float                   @default(0)
-  habits              Habit[]
-  badges              UserBadge[]
-  reminders           Reminder[]
-  budgets             Budget[]
-  expenses            Expense[]
-  incomes             Income[]
-  expenseCategories   ExpenseCategory[]
-  dailyPlans          DailyPlan[]
-  dailyPlanTasks      DailyPlanTask[]
-  journalEntries      JournalEntry[]
-  identities          Identity[]
-  rewardLedger        RewardLedger[]
-  temptationBundles   TemptationBundle[]
-  streakFreezes       StreakFreeze[]
-  rewardAllocations   HabitRewardAllocation[]
-  rewardRedemptions   RewardRedemption[]
-  weeklyReviews       WeeklyBehaviorReview[]
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
+  coins                    Int                       @default(0)
+  longestStreak            Int                       @default(0)
+  totalHabits              Int                       @default(0)
+  completionRate           Float                     @default(0)
+  habits                   Habit[]
+  badges                   UserBadge[]
+  reminders                Reminder[]
+  budgets                  Budget[]
+  expenses                 Expense[]
+  incomes                  Income[]
+  expenseCategories        ExpenseCategory[]
+  dailyPlans               DailyPlan[]
+  dailyPlanTasks           DailyPlanTask[]
+  journalEntries           JournalEntry[]
+  identities               Identity[]
+  rewardLedger             RewardLedger[]
+  temptationBundles        TemptationBundle[]
+  streakFreezes            StreakFreeze[]
+  rewardAllocations        HabitRewardAllocation[]
+  rewardRedemptions        RewardRedemption[]
+  weeklyReviews            WeeklyBehaviorReview[]
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  habitAdjustmentProposals HabitAdjustmentProposal[]
+}
+
+/// Phase 3.5 — user-approved adaptive habit adjustments (never auto-applied).
+model HabitAdjustmentProposal {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habitId          String
+  habit            Habit     @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  fingerprint      String
+  type             String // REDUCE_TARGET | REDUCE_FREQUENCY | CHANGE_TIME
+  status           String    @default("PENDING") // PENDING|ACCEPTED|REJECTED|EXPIRED
+  state            String // TOO_HARD | MINIMUM_VERSION_OVERUSED | TIMING_PROBLEM ...
+  currentSnapshot  Json
+  proposedSnapshot Json
+  confidence       Float
+  reason           String
+  sourceSignals    String[]  @default([])
+  evidence         Json
+  aiHeadline       String?
+  aiMessage        String?
+  createdAt        DateTime  @default(now())
+  resolvedAt       DateTime?
+
+  @@unique([habitId, fingerprint, status])
+  @@index([userId, createdAt])
+  @@index([habitId, createdAt])
 }
 
 /// Phase 3.4 — one persisted behavioral review per user per ISO week (Mon-based).
@@ -186,55 +214,56 @@ model JournalEntry {
 }
 
 model Habit {
-  id                   String                  @id @default(cuid())
-  userId               String
-  user                 User                    @relation(fields: [userId], references: [id])
-  title                String
-  subtitle             String?
-  icon                 String
-  iconColor            String
-  iconBg               String
-  category             String?
-  frequency            String? // e.g., "Daily", "Weekdays" (legacy)
-  scheduleType         String? // "daily" | "specific_days" | "times_per_week" | "interval"
-  scheduleDays         String[]                @default([]) // e.g., ["Mon", "Wed", "Fri"]
-  timesPerWeek         Int? // used when scheduleType = "times_per_week"
-  intervalDays         Int? // used when scheduleType = "interval"
-  priority             String? // e.g., "High", "Medium", "Low"
-  goal                 Float                   @default(1) // Target value (e.g., 30 pushups)
-  unit                 String?                 @default("times") // Unit (e.g., reps, pages)
+  id                       String                    @id @default(cuid())
+  userId                   String
+  user                     User                      @relation(fields: [userId], references: [id])
+  title                    String
+  subtitle                 String?
+  icon                     String
+  iconColor                String
+  iconBg                   String
+  category                 String?
+  frequency                String? // e.g., "Daily", "Weekdays" (legacy)
+  scheduleType             String? // "daily" | "specific_days" | "times_per_week" | "interval"
+  scheduleDays             String[]                  @default([]) // e.g., ["Mon", "Wed", "Fri"]
+  timesPerWeek             Int? // used when scheduleType = "times_per_week"
+  intervalDays             Int? // used when scheduleType = "interval"
+  priority                 String? // e.g., "High", "Medium", "Low"
+  goal                     Float                     @default(1) // Target value (e.g., 30 pushups)
+  unit                     String?                   @default("times") // Unit (e.g., reps, pages)
   // Implementation intention: "I will [BEHAVIOR] at [TIME] in [LOCATION]."
-  scheduledTime        String? // Local HH:mm (e.g., "20:00")
-  location             String?
+  scheduledTime            String? // Local HH:mm (e.g., "20:00")
+  location                 String?
   // Behavioral versions of the habit.
-  fullBehavior         String? // The normal target, described behaviorally
-  minimumBehavior      String? // The 2-minute version that preserves consistency
-  emergencyMinimum     String? // Reduced version used on very hard days
+  fullBehavior             String? // The normal target, described behaviorally
+  minimumBehavior          String? // The 2-minute version that preserves consistency
+  emergencyMinimum         String? // Reduced version used on very hard days
   // Habit stacking: "After I [stackAfter], I will [this habit]."
-  stackAfterHabitId    String?
-  stackAfter           Habit?                  @relation("HabitStack", fields: [stackAfterHabitId], references: [id], onDelete: SetNull)
-  stackedBy            Habit[]                 @relation("HabitStack")
+  stackAfterHabitId        String?
+  stackAfter               Habit?                    @relation("HabitStack", fields: [stackAfterHabitId], references: [id], onDelete: SetNull)
+  stackedBy                Habit[]                   @relation("HabitStack")
   // Per-habit reward rule overrides. Null = engine default for that kind.
-  fullCoins            Int?
-  minimumCoins         Int?
-  emergencyCoins       Int?
-  streakBonusEnabled   Boolean                 @default(true)
-  identityBonusEnabled Boolean                 @default(true)
+  fullCoins                Int?
+  minimumCoins             Int?
+  emergencyCoins           Int?
+  streakBonusEnabled       Boolean                   @default(true)
+  identityBonusEnabled     Boolean                   @default(true)
   // Virtual Reward Fund: naira allocated to the user's reward fund on every
   // FULL completion. Null disables funding for this habit. Never real money.
-  rewardFundAmount     Float?
-  isArchived           Boolean                 @default(false)
-  startDate            DateTime? // Optional start date for temporary habits
-  endDate              DateTime? // Optional end date - habit will be auto-deleted after this date
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  completions          Completion[]
-  reminders            Reminder[]
-  dailyPlanTasks       DailyPlanTask[]
-  identityLinks        IdentityHabit[]
-  temptationBundles    TemptationBundle[]
-  streakFreezes        StreakFreeze[]
-  rewardAllocations    HabitRewardAllocation[]
+  rewardFundAmount         Float?
+  isArchived               Boolean                   @default(false)
+  startDate                DateTime? // Optional start date for temporary habits
+  endDate                  DateTime? // Optional end date - habit will be auto-deleted after this date
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  completions              Completion[]
+  reminders                Reminder[]
+  dailyPlanTasks           DailyPlanTask[]
+  identityLinks            IdentityHabit[]
+  temptationBundles        TemptationBundle[]
+  streakFreezes            StreakFreeze[]
+  rewardAllocations        HabitRewardAllocation[]
+  habitAdjustmentProposals HabitAdjustmentProposal[]
 }
 
 model Budget {
