@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import { Reflector } from '@nestjs/core';
 import { ForbiddenException } from '@nestjs/common';
 import { RolesGuard } from './roles.guard';

@@ -38,7 +38,7 @@ const makeAuth = (
     userSvc as unknown as UsersService,
     mailerSvc,
   );
-  return { auth, captured, userSvc };
+  return { auth, captured, userSvc, jwtSvc };
 };
 
 describe('JWT role claims (Phase 3.8)', () => {
@@ -64,7 +64,13 @@ describe('JWT role claims (Phase 3.8)', () => {
     await auth.signIn('admin@test.dev', 'pw');
     expect(captured.every((p) => p.role === 'ADMIN')).toBe(true);
 
-    // Refresh flow loads the CURRENT user record before re-issuing.
+    // Refresh flow verifies the refresh JWT then loads the CURRENT record.
+    (jwtSvc.verifyAsync as jest.Mock).mockResolvedValue({
+      sub: 'a1',
+      email: 'admin@test.dev',
+      role: 'ADMIN',
+      token_type: 'refresh',
+    });
     userSvc.findOne.mockResolvedValue({ id: 'a1', email: 'admin@test.dev', role: 'ADMIN' });
     await auth.refreshToken('refresh-token');
     const refreshedPayloads = captured.slice(2);
