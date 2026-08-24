@@ -1,9 +1,17 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiForbiddenResponse, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiForbiddenResponse, ApiPropertyOptional, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger';
 import { Roles } from '../../../core/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { AdminAnalyticsService } from './admin-analytics.service';
+import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminEffectivenessQueryDto } from './dto/admin-effectiveness-query.dto';
+
+class DashboardPeriodQueryDto {
+  @ApiPropertyOptional({ example: '2026-08-17', description: 'Range start (inclusive). Defaults to the previous completed week.' })
+  from?: string;
+  @ApiPropertyOptional({ example: '2026-08-23', description: 'Range end (inclusive). Max 180 days.' })
+  to?: string;
+}
 
 /**
  * Phase 3.8 — ADMIN-only behavioral intelligence.
@@ -16,7 +24,25 @@ import { AdminEffectivenessQueryDto } from './dto/admin-effectiveness-query.dto'
 @ApiForbiddenResponse({ description: 'Requires ADMIN role' })
 @Controller('analytics/admin')
 export class AdminAnalyticsController {
-  constructor(private readonly adminAnalyticsSvc: AdminAnalyticsService) {}
+  constructor(
+    private readonly adminAnalyticsSvc: AdminAnalyticsService,
+    private readonly dashboardSvc: AdminDashboardService,
+  ) {}
+
+  /**
+   * Phase 3.9 — aggregate behavioral intelligence dashboard.
+   * Deterministic, privacy-floored, READ-ONLY. Zero AI calls on this route.
+   */
+  @Get('dashboard')
+  getDashboard(@Query() query: DashboardPeriodQueryDto) {
+    return this.dashboardSvc.getDashboard(query.from, query.to);
+  }
+
+  /** Optional NVIDIA wording over already-computed facts (language only). */
+  @Get('dashboard/summary')
+  getDashboardSummary(@Query() query: DashboardPeriodQueryDto) {
+    return this.dashboardSvc.getDashboardSummary(query.from, query.to);
+  }
 
   /** TUNING INSIGHT source — observation only, never automatic mutation. */
   @Get('adaptation-effectiveness')
