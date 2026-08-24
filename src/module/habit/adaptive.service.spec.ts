@@ -35,6 +35,7 @@ const HEALTHY_LANGUAGE = JSON.stringify({
 
 const makeDeps = () => {
   const db = {
+    user: { findUnique: jest.fn().mockResolvedValue({ timezone: null }) },
     habit: { findFirst: jest.fn().mockResolvedValue({
       title: 'Run', goal: 5, unit: 'km', scheduleType: 'daily',
       timesPerWeek: null, scheduledTime: '20:00',
@@ -180,7 +181,8 @@ describe('AdaptiveService — accept/reject flows', () => {
     expect(habitSvc.updateHabit).toHaveBeenCalledWith('h1', 'owner', { goal: 2 });
     expect(db.identityHabit.findFirst).not.toHaveBeenCalled();
     expect(db.habit.findFirst).not.toHaveBeenCalled(); // no direct Prisma writes
-    expect('user' in db).toBe(false); // no user/coin mutation surface at all
+    // The user row is READ-ONLY here (timezone for the evaluation window):
+    expect(Object.keys(db.user)).toEqual(['findUnique']);
   });
 
   it('foreign or non-pending proposals are NotFound on accept and reject', async () => {

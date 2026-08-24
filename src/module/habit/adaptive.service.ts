@@ -9,9 +9,6 @@ import {
   RISK_BAND_ORDER,
   AdaptationOutcomeName,
 } from '../../core/utils/adaptive.constants';
-import {
-  buildDaySeries,
-} from '../../core/utils/behavior-analytics.utils';
 import { isScheduledOnDate, shiftDayKey } from '../../core/utils/schedule.utils';
 import { localDateKeyInZone } from '../../core/utils/week.utils';
 import {
@@ -367,9 +364,12 @@ export class AdaptiveService {
       )
       .filter((v): v is number => v !== null);
 
-    const latest = acceptedRows.find(
-      (r) => r.outcome && r.outcome !== 'PENDING',
-    );
+    const latest = [...acceptedRows]
+      .filter((r) => r.outcome && r.outcome !== 'PENDING')
+      .sort(
+        (a, b) =>
+          (b.acceptedAt?.getTime() ?? 0) - (a.acceptedAt?.getTime() ?? 0),
+      )[0];
 
     return {
       accepted: acceptedRows.length,

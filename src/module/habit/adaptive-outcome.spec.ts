@@ -85,6 +85,17 @@ const acceptedRow = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+// Implicit "today" paths are clock-sensitive — freeze for determinism.
+beforeAll(() => {
+  jest.useFakeTimers({
+    doNotFake: ['nextTick', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'queueMicrotask', 'performance'],
+  });
+  jest.setSystemTime(new Date('2026-08-23T12:00:00.000Z'));
+});
+afterAll(() => {
+  jest.useRealTimers();
+});
+
 describe('acceptance — immutable baseline capture', () => {
   it('accept writes baseline + evaluation window exactly once, pre-change values', async () => {
     const { svc, db } = makeDeps();
@@ -135,9 +146,9 @@ describe('outcome evaluation — classification & idempotency', () => {
 
   it('fewer than 3 scheduled opportunities → INSUFFICIENT_DATA with real count', async () => {
     const { svc, db } = makeDeps();
-    // times_per_week=1 → only ~2 opportunities inside the 14-day window.
+    // Mondays-only schedule → exactly two opportunities in the window.
     db.habit.findFirst.mockResolvedValue({
-      ...dailyShape, scheduleType: 'times_per_week', timesPerWeek: 1,
+      ...dailyShape, scheduleType: 'specific_days', scheduleDays: ['Mon'],
       completions: [{ date: '2026-08-03', status: true }],
     });
     db.habitAdjustmentProposal.findMany.mockResolvedValue([acceptedRow()]);
@@ -150,11 +161,12 @@ describe('outcome evaluation — classification & idempotency', () => {
   });
 
   it.each([
-    ['IMPROVED', 0.9],
-    ['UNCHANGED', 0.45],
-    ['WORSENED', 0.1],
-  ])('daily habit fully done at %s path → %s', async (expected, rate) => {
+    ['IMPROVED', 0.9, 'LOW'],
+    ['UNCHANGED', 0.45, 'HIGH'],
+    ['WORSENED', 0.1, 'CRITICAL'],
+  ] as const)('daily habit fully done at %s path → %s', async (expected, rate, postLevel) => {
     const { svc, db, analytics } = makeDeps();
+    void postLevel;
     // Every day in the window is a completed opportunity at `rate`:
     const completions: Array<{ date: string; status: boolean }> = [];
     for (let k = 0; k < 14; k++) {
@@ -167,11 +179,17 @@ describe('outcome evaluation — classification & idempotency', () => {
     completions.forEach((c, i) => { c.status = i < doneCount; });
     db.habit.findFirst.mockResolvedValue({ ...dailyShape, completions });
     db.habitAdjustmentProposal.findMany.mockResolvedValue([acceptedRow()]);
-    analytics.getHabitBehaviorReport.mockResolvedValue(healthyReport());
+    analytics.getHabitBehaviorReport.mockResolvedValue({
+      ...healthyReport(),
+      risk: {
+        score: postLevel === 'LOW' ? 0.05 : postLevel === 'CRITICAL' ? 0.9 : 0.65,
+        level: postLevel,
+      },
+    });
     await svc.evaluateDueOutcomes('owner', 'h1');
     const data = db.habitAdjustmentProposal.updateMany.mock.calls[0][0].data;
     expect(data.outcome).toBe(expected);
-    if (expected !== 'INSUFFICIENT_DATA') {
+    {
       expect(data.postCompletionRate).toBeCloseTo(rate as number, 1);
       // Baselines are never part of the finalize payload:
       expect(data.baselineCompletionRate).toBeUndefined();
@@ -187,7 +205,8 @@ describe('outcome evaluation — classification & idempotency', () => {
       const completions = Array.from({ length: 14 }, (_, k) => {
         const d = new Date('2026-08-01T12:00:00Z');
         d.setUTCDate(d.getUTCDate() + k);
-        return { date: d.toISOString().slice(0, 10), status: true };
+        // ~baseline rate keeps the completion delta out of the decision.
+        return { date: d.toISOString().slice(0, 10), status: k < 6 };
       });
       db.habit.findFirst.mockResolvedValue({ ...dailyShape, completions });
       db.habitAdjustmentProposal.findMany.mockResolvedValue([acceptedRow()]);

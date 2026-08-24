@@ -11,7 +11,6 @@ import { BEHAVIOR_WINDOWS, SIGNAL_THRESHOLDS } from '../../core/utils/behavior.c
 import { AnalyzedHabit } from '../../core/utils/behavior-analytics.utils';
 import { isScheduledOnDate, shiftDayKey } from '../../core/utils/schedule.utils';
 import { evaluateIntervention } from './intervention.engine';
-import { INTERVENTION_THRESHOLDS } from './intervention.constants';
 import {
   OVERLOAD_THRESHOLDS,
 } from '../../core/utils/behavior.constants';

@@ -112,7 +112,7 @@ describe('portfolio overload — contribution & identity prioritization', () => 
     const weakEntry = r.contributors.find((c) => c.title === 'Evening run');
     expect(anchorEntry?.isIdentityAnchor).toBe(true);
     if (weakEntry && anchorEntry) {
-      expect(r.contributors.indexOf(weakEntry!)).toBeLessThan(r.contributors.indexOf(anchorEntry!));
+      expect(r.contributors.indexOf(weakEntry)).toBeLessThan(r.contributors.indexOf(anchorEntry));
     }
   });
 
