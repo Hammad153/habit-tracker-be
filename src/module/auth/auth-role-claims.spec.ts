@@ -58,7 +58,7 @@ describe('JWT role claims (Phase 3.8)', () => {
   it('ADMIN sign-in embeds ADMIN; refresh re-fetches the row so promotion propagates', async () => {
     const bcrypt = require('bcryptjs') as typeof import('bcryptjs');
     const hash = await bcrypt.hash('pw', 4);
-    const { auth, captured, userSvc } = makeAuth({
+    const { auth, captured, userSvc, jwtSvc } = makeAuth({
       id: 'a1', email: 'admin@test.dev', role: 'ADMIN', password: hash,
     });
     await auth.signIn('admin@test.dev', 'pw');
