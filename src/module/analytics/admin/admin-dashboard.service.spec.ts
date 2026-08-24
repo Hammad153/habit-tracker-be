@@ -63,11 +63,23 @@ const makeDeps = () => {
     generateRawText: jest.fn(),
     generateCoachResponse: jest.fn(),
   };
+  const behavioralEvents = {
+    funnelCounts: jest.fn().mockResolvedValue({
+      INTERVENTION_GENERATED: 12,
+      INTERVENTION_VIEWED: 9,
+      INTERVENTION_ACTION_COMPLETED: 4,
+      NOTIFICATION_CANDIDATE_GENERATED: 30,
+      NOTIFICATION_DELIVERED: 26,
+      NOTIFICATION_OPENED: 11,
+      NOTIFICATION_ACTION_COMPLETED: 6,
+    }),
+  };
   const svc = new AdminDashboardService(
     db as never,
+    behavioralEvents as never,
     aiProvider as unknown as AiProvider,
   );
-  return { svc, db, aiProvider };
+  return { svc, db, aiProvider, behavioralEvents };
 };
 
 describe('dashboard period handling (spec §4)', () => {
@@ -113,8 +125,7 @@ describe('dashboard aggregates & honesty markers', () => {
     expect(res.interventions.generated).toBe('NOT_MEASURABLE');
     expect(res.notifications.candidates).toBe('NOT_MEASURABLE');
     expect(res.notifications.deliveryRate).toBe('NOT_MEASURABLE');
-    expect(res.notifications.responseAttribution).toBe('NOT_MEASURABLE');
-  });
+      });
 
   it('notification deliveries aggregate by type with the privacy floor', async () => {
     const { svc, db } = makeDeps();

@@ -153,13 +153,22 @@ describe('notification funnel — delivery correlation (IDOR-safe)', () => {
     ]);
   });
 
-  it('ACTION_STARTED without OPENED → rejected at the OPENED gate', async () => {
+  it('ACTION_STARTED without OPENED → rejected at the earliest unmet gate', async () => {
     const { svc, db } = makeDeps();
-    // Delivery exists (owned), but no DELIVERED/OPENED events recorded yet.
+    // Delivery owned; DELIVERED recorded but OPENED never happened.
+    const deliveredRow = { id: 'd1', fingerprint: 'fp' };
+    db.behavioralEvent.findFirst
+      .mockResolvedValueOnce(deliveredRow) // DELIVERED gate passes
+      .mockResolvedValueOnce(null);        // OPENED predecessor missing
+    await expect(
+      svc.recordNotificationInteraction('u1', 'del-1', 'NOTIFICATION_ACTION_STARTED'),
+    ).rejects.toThrow(/has not reached NOTIFICATION_OPENED yet/);
+
+    // And with NO delivered event at all, the earlier gate fires:
     db.behavioralEvent.findFirst.mockResolvedValue(null);
     await expect(
       svc.recordNotificationInteraction('u1', 'del-1', 'NOTIFICATION_ACTION_STARTED'),
-    ).rejects.toThrow(/NOTIFICATION_DELIVERED|NOTIFICATION_OPENED/);
+    ).rejects.toThrow(/not yet marked delivered/);
   });
 });
 

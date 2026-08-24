@@ -7,6 +7,7 @@ import {
   SUPPRESSED_REASON,
 } from './admin.constants';
 import { DatabaseService } from '../../../core/database/database.service';
+import { BehavioralEventService } from '../behavioral-event.service';
 import {
   EffectivenessRow,
   aggregateEffectivenessByType,
@@ -50,6 +51,7 @@ const pct = (v: number | null): number | null =>
 export class AdminDashboardService {
   constructor(
     private readonly databaseSvc: DatabaseService,
+    private readonly behavioralEvents: BehavioralEventService,
     @Inject(AI_PROVIDER) private readonly aiProvider: AiProvider,
   ) {}
 
@@ -116,6 +118,13 @@ export class AdminDashboardService {
     // ---- Bounded behavioral sample (pure engines reused) -------------------
     const sample = await this.sampleBehavior(todayKey());
 
+    // ---- Behavioral event funnel (Phase 4.1 ledger) -------------------------
+    const events = await this.behavioralEvents.funnelCounts(
+      'ADMIN_SCOPE_ALL',
+      startAt,
+      endAt,
+    );
+
     return {
       generatedAt: new Date().toISOString(),
       period: { from: startKey, to: endKey, inProgress: isInProgress },
@@ -142,9 +151,26 @@ export class AdminDashboardService {
         sampleConfidence: sample.confidence,
       },
       interventions: {
-        generated: 'NOT_MEASURABLE' as const, // computed on demand, not persisted
-        byType: 'NOT_MEASURABLE' as const,
-        byPriority: 'NOT_MEASURABLE' as const,
+        // Phase 4.1 — measured from the immutable event ledger.
+        generated: floorCount(events.INTERVENTION_GENERATED ?? 0),
+        viewed: floorCount(events.INTERVENTION_VIEWED ?? 0),
+        dismissed: floorCount(events.INTERVENTION_DISMISSED ?? 0),
+        actionStarted: floorCount(
+          events.INTERVENTION_ACTION_STARTED ?? 0,
+        ),
+        actionCompleted: floorCount(
+          events.INTERVENTION_ACTION_COMPLETED ?? 0,
+        ),
+        viewRate: this.rate(
+          events.INTERVENTION_GENERATED ?? 0,
+          events.INTERVENTION_VIEWED ?? 0,
+        ),
+        actionRate: this.rate(
+          events.INTERVENTION_GENERATED ?? 0,
+          events.INTERVENTION_ACTION_COMPLETED ?? 0,
+        ),
+        byType: 'NOT_MEASURABLE' as const, // intervention type lives on the
+        // response payload, not yet on the ledger row (future column).
         acceptanceRate: this.acceptanceRate(
           proposalsInRange.length,
           proposalsInRange.filter((p) => p.status === 'ACCEPTED').length,
@@ -172,15 +198,26 @@ export class AdminDashboardService {
         note: 'Estimated from the bounded behavioral sample (Phase 3.6 engine).',
       },
       notifications: {
-        delivered: floorCount(
-          await this.databaseSvc.notificationDelivery.count({
-            where: { createdAt: { gte: startAt, lte: endAt } },
-          }),
+        // Phase 4.1 — full measurable funnel from the event ledger.
+        candidates: floorCount(events.NOTIFICATION_CANDIDATE_GENERATED ?? 0),
+        delivered: floorCount(events.NOTIFICATION_DELIVERED ?? 0),
+        opened: floorCount(events.NOTIFICATION_OPENED ?? 0),
+        dismissed: floorCount(events.NOTIFICATION_DISMISSED ?? 0),
+        actionStarted: floorCount(events.NOTIFICATION_ACTION_STARTED ?? 0),
+        actionCompleted: floorCount(events.NOTIFICATION_ACTION_COMPLETED ?? 0),
+        deliveryRate: this.rate(
+          events.NOTIFICATION_CANDIDATE_GENERATED ?? 0,
+          events.NOTIFICATION_DELIVERED ?? 0,
+        ),
+        openRate: this.rate(
+          events.NOTIFICATION_DELIVERED ?? 0, // correct denominator (§14)
+          events.NOTIFICATION_OPENED ?? 0,
+        ),
+        actionRate: this.rate(
+          events.NOTIFICATION_DELIVERED ?? 0,
+          events.NOTIFICATION_ACTION_COMPLETED ?? 0,
         ),
         byType: await this.deliveriesByType(startAt, endAt),
-        candidates: 'NOT_MEASURABLE' as const, // ephemeral, not persisted
-        deliveryRate: 'NOT_MEASURABLE' as const, // no candidate ledger exists
-        responseAttribution: 'NOT_MEASURABLE' as const, // correlation infra deferred
       },
       weeklyReviews: {
         completed: floorCount(
@@ -405,6 +442,20 @@ export class AdminDashboardService {
       out[g.type] = floorCount(g._count._all);
     }
     return out;
+  }
+
+  /** Correct-denominator rate with privacy flooring on BOTH sides. */
+  private rate(numerator: number, denominator: number) {
+    if (
+      denominator < MIN_AGGREGATE_SAMPLE ||
+      numerator < MIN_AGGREGATE_SAMPLE
+    ) {
+      return { suppressed: true as const, reason: SUPPRESSED_REASON };
+    }
+    return {
+      suppressed: false as const,
+      rate: Number((numerator / denominator).toFixed(4)),
+    };
   }
 
   private acceptanceRate(generated: number, accepted: number) {
