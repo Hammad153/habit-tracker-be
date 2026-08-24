@@ -169,9 +169,14 @@ model BehavioralEvent {
   occurredAt             DateTime            @default(now())
   proposalId             String?
   notificationDeliveryId String?
+  // Phase 4.2 — server-authoritative classification (never client-supplied):
+  interventionType       String?
+  notificationType       String?
   metadata               Json?
 
   @@unique([userId, fingerprint, type])
+  @@index([interventionType, occurredAt])
+  @@index([notificationType, occurredAt])
   @@index([userId, occurredAt])
   @@index([habitId, occurredAt])
   @@index([type, occurredAt])

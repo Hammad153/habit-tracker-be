@@ -337,7 +337,10 @@ export class NotificationCandidatesService {
         void interventionPriority;
         // Phase 4.1 — CANDIDATE_GENERATED observation (best-effort).
         this.behavioralEvents
-          .recordCandidateGenerated(userId, { fingerprint: c.fingerprint })
+          .recordCandidateGenerated(userId, {
+            fingerprint: c.fingerprint,
+            notificationType: c.type,
+          })
           .catch(() => undefined);
         return rest;
       });

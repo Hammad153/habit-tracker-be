@@ -48,6 +48,9 @@ const makeDeps = () => {
       }),
       groupBy: jest.fn().mockResolvedValue([]),
     },
+    behavioralEvent: {
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
     notificationDelivery: {
       count: jest.fn().mockResolvedValue(42),
       groupBy: jest.fn().mockResolvedValue([
@@ -138,11 +141,13 @@ describe('dashboard aggregates & honesty markers', () => {
     // Notification funnel: openRate uses DELIVERED denominator (spec §14).
     expect(res.notifications.candidates).toBe(30);
     expect(res.notifications.delivered).toBe(26);
-    expect(res.notifications.openRate).toEqual({
-      suppressed: false, rate: Number((11 / 26).toFixed(4)),
+    expect(res.notifications.openRate).toMatchObject({
+      suppressed: false, rate: 0.4231,
+      numerator: 11, denominator: 26, label: 'opened/delivered',
     });
-    expect(res.notifications.actionRate).toEqual({
-      suppressed: false, rate: Number((6 / 26).toFixed(4)), // 6 ≥ floor
+    expect(res.notifications.actionRate).toMatchObject({
+      suppressed: false, rate: Number((6 / 26).toFixed(4)),
+      numerator: 6, denominator: 26,
     });
     expect(JSON.stringify(res)).not.toContain('u1');
     expect(res.interventions.byType).toBe('NOT_MEASURABLE'); // still honest
@@ -150,15 +155,26 @@ describe('dashboard aggregates & honesty markers', () => {
 
   it('notification deliveries aggregate by type with the privacy floor', async () => {
     const { svc, db } = makeDeps();
-    db.notificationDelivery.groupBy.mockResolvedValue([
-      { type: 'RARE_TYPE', _count: { _all: 2 } }, // below floor of 5
-    ]);
-    const res = await svc.getDashboard();
-    expect(res.notifications.byType.RARE_TYPE).toEqual({
-      suppressed: true,
-      reason: 'INSUFFICIENT_AGGREGATE_SAMPLE',
+    db.habitAdjustmentProposal.findMany.mockResolvedValue([]);
+    db.notificationDelivery.groupBy.mockResolvedValue([]);
+    db.behavioralEvent.groupBy.mockImplementation(({ by }) => {
+      const key = JSON.stringify(by);
+      if (key.includes('notificationType')) {
+        // RARE_TYPE has only 2 candidates — below MIN_AGGREGATE_SAMPLE.
+        return Promise.resolve([
+          { notificationType: 'RARE_TYPE', type: 'NOTIFICATION_CANDIDATE_GENERATED', _count: { _all: 2 } },
+          { notificationType: 'OVERLOAD_DETECTED', type: 'NOTIFICATION_CANDIDATE_GENERATED', _count: { _all: 9 } },
+        ]);
+      }
+      return Promise.resolve([]);
     });
-  });
+    const res = await svc.getDashboard();
+    const rare = res.notifications.byType.find((t: { type: string }) => t.type === 'RARE_TYPE');
+    expect(rare).toBeUndefined(); // suppressed entirely
+    const overload = res.notifications.byType.find(
+      (t: { type: string }) => t.type === 'OVERLOAD_DETECTED',
+    );
+    expect(overload?.candidates).toBe(9); });
 
   it('behavior distributions come from the bounded pure-engine sample', async () => {
     const { svc } = makeDeps();

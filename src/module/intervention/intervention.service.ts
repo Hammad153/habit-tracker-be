@@ -171,7 +171,11 @@ export class InterventionService {
     // Phase 4.1 — server-side GENERATION observation (fire-and-forget; the
     // intervention response itself is never blocked by ledger writes).
     this.behavioralEvents
-      .recordInterventionGenerated(userId, { fingerprint, habitId })
+      .recordInterventionGenerated(userId, {
+        fingerprint,
+        habitId,
+        interventionType: evaluated.type,
+      })
       .catch(() => undefined);
 
     return {

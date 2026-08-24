@@ -21,6 +21,11 @@ import {
   HabitLoadSummary,
   buildPortfolioOverloadReport,
 } from '../portfolio-overload.engine';
+import {
+  calculateConfidence,
+  calculateFunnel,
+  calculateRate,
+} from '../effectiveness.utils';
 
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const SAMPLED_USERS = 25;
@@ -161,23 +166,24 @@ export class AdminDashboardService {
         actionCompleted: floorCount(
           events.INTERVENTION_ACTION_COMPLETED ?? 0,
         ),
-        viewRate: this.rate(
-          events.INTERVENTION_VIEWED ?? 0,      // numerator
-          events.INTERVENTION_GENERATED ?? 0,   // denominator (§14)
-        ),
-        actionRate: this.rate(
-          events.INTERVENTION_ACTION_COMPLETED ?? 0,
-          events.INTERVENTION_GENERATED ?? 0,
-        ),
-        byType: 'NOT_MEASURABLE' as const, // intervention type lives on the
-        // response payload, not yet on the ledger row (future column).
+        // Phase 4.2 — explicit pairwise denominators:
+        viewRate: calculateRate(events.INTERVENTION_VIEWED ?? 0, events.INTERVENTION_GENERATED ?? 0, 'viewed/generated'),
+        actionStartRate: calculateRate(events.INTERVENTION_ACTION_STARTED ?? 0, events.INTERVENTION_VIEWED ?? 0, 'action-started/viewed'),
+        actionCompletionRate: calculateRate(events.INTERVENTION_ACTION_COMPLETED ?? 0, events.INTERVENTION_ACTION_STARTED ?? 0, 'action-completed/action-started'),
+        actionRate: this.rate(events.INTERVENTION_ACTION_COMPLETED ?? 0, events.INTERVENTION_GENERATED ?? 0),
+        // Phase 4.2 — per-type classification (server-issued column).
+        byType: await this.interventionsByType(startAt, endAt),
         acceptanceRate: this.acceptanceRate(
           proposalsInRange.length,
           proposalsInRange.filter((p) => p.status === 'ACCEPTED').length,
         ),
       },
       adaptations: {
-        proposed: floorCount(proposalsInRange.length),
+        // Phase 4.2 — full funnel incl. ledger observations:
+        generated: floorCount(
+          events.ADAPTIVE_PROPOSAL_GENERATED ?? proposalsInRange.length,
+        ),
+        viewed: floorCount(events.ADAPTIVE_PROPOSAL_VIEWED ?? 0),
         accepted: floorCount(acceptedInRange.length),
         rejected: statusCount('REJECTED'),
         expired: statusCount('EXPIRED'),
@@ -189,6 +195,18 @@ export class AdminDashboardService {
         insufficientEvidence: floorCount(
           rows.filter((r) => r.outcome === 'INSUFFICIENT_DATA').length,
         ),
+        viewRate: calculateRate(events.ADAPTIVE_PROPOSAL_VIEWED ?? 0, events.ADAPTIVE_PROPOSAL_GENERATED ?? 0, 'viewed/generated'),
+        acceptanceRate: this.acceptanceRate(
+          events.ADAPTIVE_PROPOSAL_GENERATED ?? proposalsInRange.length,
+          acceptedInRange.length,
+        ),
+        generationToAcceptanceRate: calculateRate(acceptedInRange.length, events.ADAPTIVE_PROPOSAL_GENERATED ?? 0, 'accepted/generated'),
+        evaluationRate: this.rate(evaluatedTotal, acceptedInRange.length),
+        improvementRate: this.rate(
+          rows.filter((r) => r.outcome === 'IMPROVED').length,
+          evaluatedTotal,
+        ),
+        confidence: calculateConfidence(evaluatedTotal),
         effectivenessByType,
       },
       overload: {
@@ -217,7 +235,7 @@ export class AdminDashboardService {
           events.NOTIFICATION_ACTION_COMPLETED ?? 0,
           events.NOTIFICATION_DELIVERED ?? 0,
         ),
-        byType: await this.deliveriesByType(startAt, endAt),
+        byType: await this.notificationsByType(startAt, endAt),
       },
       weeklyReviews: {
         completed: floorCount(
@@ -226,6 +244,14 @@ export class AdminDashboardService {
               status: 'READY',
               createdAt: { gte: startAt, lte: endAt },
             },
+          }),
+        ),
+        viewed: floorCount(events.WEEKLY_REVIEW_VIEWED ?? 0),
+        regenerations: floorCount(events.WEEKLY_REVIEW_REGENERATED ?? 0),
+        reviewViewRate: this.rate(
+          events.WEEKLY_REVIEW_VIEWED ?? 0,
+          await this.databaseSvc.weeklyBehaviorReview.count({
+            where: { status: 'READY', createdAt: { gte: startAt, lte: endAt } },
           }),
         ),
       },
@@ -459,6 +485,104 @@ export class AdminDashboardService {
       suppressed: false as const,
       rate: Number((numerator / denominator).toFixed(4)),
     };
+  }
+
+  /** Per-intervention-type funnel from the classified ledger rows. */
+  private async interventionsByType(startAt: Date, endAt: Date) {
+    const groups = await this.databaseSvc.behavioralEvent.groupBy({
+      by: ['interventionType', 'type'],
+      where: {
+        occurredAt: { gte: startAt, lte: endAt },
+        type: {
+          in: [
+            'INTERVENTION_GENERATED',
+            'INTERVENTION_VIEWED',
+            'INTERVENTION_DISMISSED',
+            'INTERVENTION_ACTION_STARTED',
+            'INTERVENTION_ACTION_COMPLETED',
+          ],
+        },
+      },
+      _count: { _all: true },
+    });
+    const byType = new Map<string, Record<string, number>>();
+    for (const g of groups) {
+      if (!g.interventionType) continue;
+      const entry = byType.get(g.interventionType) ?? {};
+      entry[g.type] = g._count._all;
+      byType.set(g.interventionType, entry);
+    }
+    return [...byType.entries()]
+      .filter(([, counts]) =>
+        (counts.INTERVENTION_GENERATED ?? 0) >= MIN_AGGREGATE_SAMPLE)
+      .map(([type, counts]) => ({
+        type,
+        generated: counts.INTERVENTION_GENERATED ?? 0,
+        funnel: calculateFunnel([
+          { label: 'generated', count: counts.INTERVENTION_GENERATED ?? 0 },
+          { label: 'viewed', count: counts.INTERVENTION_VIEWED ?? 0 },
+          { label: 'actionStarted', count: counts.INTERVENTION_ACTION_STARTED ?? 0 },
+          { label: 'actionCompleted', count: counts.INTERVENTION_ACTION_COMPLETED ?? 0 },
+        ]),
+        confidence: calculateConfidence(counts.INTERVENTION_GENERATED ?? 0),
+      }))
+      .sort((a, b) => b.generated - a.generated);
+  }
+
+  /** Per-notification-type funnel from classified ledger rows. */
+  private async notificationsByType(startAt: Date, endAt: Date) {
+    const groups = await this.databaseSvc.behavioralEvent.groupBy({
+      by: ['notificationType', 'type'],
+      where: {
+        occurredAt: { gte: startAt, lte: endAt },
+        type: {
+          in: [
+            'NOTIFICATION_CANDIDATE_GENERATED',
+            'NOTIFICATION_DELIVERED',
+            'NOTIFICATION_OPENED',
+            'NOTIFICATION_DISMISSED',
+            'NOTIFICATION_ACTION_STARTED',
+            'NOTIFICATION_ACTION_COMPLETED',
+          ],
+        },
+      },
+      _count: { _all: true },
+    });
+    const byType = new Map<string, Record<string, number>>();
+    for (const g of groups) {
+      if (!g.notificationType) continue;
+      const entry = byType.get(g.notificationType) ?? {};
+      entry[g.type] = g._count._all;
+      byType.set(g.notificationType, entry);
+    }
+    // Privacy floor: types with fewer than MIN_AGGREGATE_SAMPLE candidates
+    // are suppressed entirely rather than exposing small cohorts.
+    return [...byType.entries()]
+      .filter(([, counts]) => {
+        const c = counts.NOTIFICATION_CANDIDATE_GENERATED ?? 0;
+        return c >= MIN_AGGREGATE_SAMPLE || c === 0;
+      })
+      .map(([type, counts]) => {
+        const c = counts.NOTIFICATION_CANDIDATE_GENERATED ?? 0;
+        return {
+          type,
+          candidates: c,
+          delivered: counts.NOTIFICATION_DELIVERED ?? 0,
+          opened: counts.NOTIFICATION_OPENED ?? 0,
+          dismissed: counts.NOTIFICATION_DISMISSED ?? 0,
+          actionStarted: counts.NOTIFICATION_ACTION_STARTED ?? 0,
+          actionCompleted: counts.NOTIFICATION_ACTION_COMPLETED ?? 0,
+          funnel: calculateFunnel([
+            { label: 'candidates', count: c },
+            { label: 'delivered', count: counts.NOTIFICATION_DELIVERED ?? 0 },
+            { label: 'opened', count: counts.NOTIFICATION_OPENED ?? 0 },
+            { label: 'actionStarted', count: counts.NOTIFICATION_ACTION_STARTED ?? 0 },
+            { label: 'actionCompleted', count: counts.NOTIFICATION_ACTION_COMPLETED ?? 0 },
+          ]),
+          confidence: calculateConfidence(c),
+        };
+      })
+      .sort((a, b) => b.candidates - a.candidates);
   }
 
   private acceptanceRate(generated: number, accepted: number) {

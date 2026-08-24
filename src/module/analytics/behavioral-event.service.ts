@@ -26,6 +26,9 @@ export interface RecordEventInput {
   habitId?: string | null;
   proposalId?: string | null;
   notificationDeliveryId?: string | null;
+  /** Server-authoritative classification — NEVER client-supplied (Phase 4.2). */
+  interventionType?: string | null;
+  notificationType?: string | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -45,6 +48,8 @@ export class BehavioralEventService {
           habitId: input.habitId ?? null,
           proposalId: input.proposalId ?? null,
           notificationDeliveryId: input.notificationDeliveryId ?? null,
+          interventionType: input.interventionType ?? null,
+          notificationType: input.notificationType ?? null,
           metadata: (input.metadata ?? undefined) as Prisma.InputJsonValue,
         },
         select: { id: true },
@@ -69,12 +74,18 @@ export class BehavioralEventService {
   /** Server-side GENERATED emission for interventions (Phase 3.2 flow). */
   public async recordInterventionGenerated(
     userId: string,
-    args: { fingerprint: string; habitId: string },
+    args: {
+      fingerprint: string;
+      habitId: string;
+      /** Authoritative classification from the evaluated intervention. */
+      interventionType?: string;
+    },
   ): Promise<void> {
     await this.record(userId, {
       type: 'INTERVENTION_GENERATED',
       fingerprint: args.fingerprint,
       habitId: args.habitId,
+      interventionType: args.interventionType ?? null,
       metadata: { source: 'intervention-engine' },
     });
   }
@@ -139,11 +150,12 @@ export class BehavioralEventService {
   /** Candidate/delivery/open funnel backed by NotificationDelivery truth. */
   public async recordCandidateGenerated(
     userId: string,
-    args: { fingerprint: string },
+    args: { fingerprint: string; notificationType?: string },
   ): Promise<void> {
     await this.record(userId, {
       type: 'NOTIFICATION_CANDIDATE_GENERATED',
       fingerprint: args.fingerprint,
+      notificationType: args.notificationType ?? null,
       metadata: { source: 'notification-candidates' },
     });
   }
@@ -153,11 +165,13 @@ export class BehavioralEventService {
     deliveryId: string,
     fingerprint: string,
   ): Promise<void> {
-    await this.ensureDeliveryOwnership(userId, deliveryId);
+    // notificationType is copied from the AUTHORITATIVE delivery row.
+    const delivery = await this.ensureDeliveryOwnership(userId, deliveryId);
     await this.record(userId, {
       type: 'NOTIFICATION_DELIVERED',
       fingerprint,
       notificationDeliveryId: deliveryId,
+      notificationType: delivery.type,
     });
   }
 
@@ -182,7 +196,7 @@ export class BehavioralEventService {
         notificationDeliveryId: deliveryId,
         type: 'NOTIFICATION_DELIVERED',
       },
-      select: { id: true, fingerprint: true },
+      select: { id: true, fingerprint: true, type: true },
     });
     if (!deliveredEvent) {
       throw new BadRequestException('notification not yet marked delivered');
@@ -318,7 +332,7 @@ export class BehavioralEventService {
   private async ensureDeliveryOwnership(userId: string, deliveryId: string) {
     const delivery = await this.databaseSvc.notificationDelivery.findFirst({
       where: { id: deliveryId, userId },
-      select: { id: true, fingerprint: true },
+      select: { id: true, fingerprint: true, type: true },
     });
     if (!delivery) {
       // Foreign OR nonexistent deliveries are indistinguishable (IDOR-safe).
