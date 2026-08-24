@@ -1,11 +1,11 @@
+import { CompletionKind, Completion, Prisma, Habit } from '@prisma/client';
+import { INTERACTIVE_TX_OPTIONS } from '../../core/database/transaction-options';
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CompletionKind, Completion, Prisma, Habit } from '@prisma/client';
-import { INTERACTIVE_TX_OPTIONS } from '../../core/database/transaction-options';
 import { DatabaseService } from '../../core/database/database.service';
 import { ProfileService } from '../profile/profile.service';
 import { AwardsService } from '../awards/awards.service';
@@ -625,7 +625,7 @@ export class HabitService {
         ...completion,
         rewards,
       };
-    });
+    }, INTERACTIVE_TX_OPTIONS);
 
     if (!result) {
       throw new BadRequestException('Completion could not be processed');
