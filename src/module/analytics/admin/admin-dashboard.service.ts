@@ -223,18 +223,11 @@ export class AdminDashboardService {
         dismissed: floorCount(events.NOTIFICATION_DISMISSED ?? 0),
         actionStarted: floorCount(events.NOTIFICATION_ACTION_STARTED ?? 0),
         actionCompleted: floorCount(events.NOTIFICATION_ACTION_COMPLETED ?? 0),
-        deliveryRate: this.rate(
-          events.NOTIFICATION_DELIVERED ?? 0,
-          events.NOTIFICATION_CANDIDATE_GENERATED ?? 0,
-        ),
-        openRate: this.rate(
-          events.NOTIFICATION_OPENED ?? 0,
-          events.NOTIFICATION_DELIVERED ?? 0, // correct denominator (§14)
-        ),
-        actionRate: this.rate(
-          events.NOTIFICATION_ACTION_COMPLETED ?? 0,
-          events.NOTIFICATION_DELIVERED ?? 0,
-        ),
+        deliveryRate: calculateRate(events.NOTIFICATION_DELIVERED ?? 0, events.NOTIFICATION_CANDIDATE_GENERATED ?? 0, 'delivered/candidates'),
+        openRate: calculateRate(events.NOTIFICATION_OPENED ?? 0, events.NOTIFICATION_DELIVERED ?? 0, 'opened/delivered'),
+        actionStartRate: calculateRate(events.NOTIFICATION_ACTION_STARTED ?? 0, events.NOTIFICATION_OPENED ?? 0, 'action-started/opened'),
+        actionCompletionRate: calculateRate(events.NOTIFICATION_ACTION_COMPLETED ?? 0, events.NOTIFICATION_ACTION_STARTED ?? 0, 'action-completed/action-started'),
+        actionRate: calculateRate(events.NOTIFICATION_ACTION_COMPLETED ?? 0, events.NOTIFICATION_DELIVERED ?? 0, 'action-completed/delivered'),
         byType: await this.notificationsByType(startAt, endAt),
       },
       weeklyReviews: {

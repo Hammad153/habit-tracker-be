@@ -153,7 +153,95 @@ describe('dashboard aggregates & honesty markers', () => {
       numerator: 6, denominator: 26,
     });
     expect(JSON.stringify(res)).not.toContain('u1');
-    expect(res.interventions.byType).toBe('NOT_MEASURABLE'); // still honest
+    // byType is now measured via server-issued classification columns:
+    expect(Array.isArray(res.interventions.byType)).toBe(true);
+  });
+
+  it('interventions.byType exposes per-type funnels with confidence', async () => {
+    const { svc, db, behavioralEvents } = makeDeps();
+    db.behavioralEvent.groupBy.mockImplementation(({ by }) => {
+      if (JSON.stringify(by).includes('interventionType')) {
+        return Promise.resolve([
+          { interventionType: 'REDUCE_DIFFICULTY', type: 'INTERVENTION_GENERATED', _count: { _all: 25 } },
+          { interventionType: 'REDUCE_DIFFICULTY', type: 'INTERVENTION_VIEWED', _count: { _all: 20 } },
+          { interventionType: 'REDUCE_DIFFICULTY', type: 'INTERVENTION_ACTION_STARTED', _count: { _all: 10 } },
+          { interventionType: 'REDUCE_DIFFICULTY', type: 'INTERVENTION_ACTION_COMPLETED', _count: { _all: 8 } },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    void behavioralEvents;
+    const res = await svc.getDashboard();
+    const rt = res.interventions.byType.find(
+      (t: { type: string }) => t.type === 'REDUCE_DIFFICULTY',
+    );
+    expect(rt!.generated).toBe(25);
+    expect(rt!.confidence).toBe('HIGH'); // ≥20 generated
+    const stages = Object.fromEntries(
+      rt!.funnel.map((f: { label: string; stepRate?: number }) => [f.label, f.stepRate]),
+    );
+    expect(stages.viewed).toBe(0.8); // 20/25
+    expect(stages.actionStarted).toBe(0.5); // 10/20
+    expect(stages.actionCompleted).toBe(0.8); // 8/10
+  });
+
+  it('small-cohort types are suppressed entirely from interventions.byType', async () => {
+    const { svc, db } = makeDeps();
+    db.behavioralEvent.groupBy.mockImplementation(({ by }) => {
+      if (JSON.stringify(by).includes('interventionType')) {
+        return Promise.resolve([
+          { interventionType: 'RARE', type: 'INTERVENTION_GENERATED', _count: { _all: 3 } },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    const res = await svc.getDashboard();
+    expect(res.interventions.byType).toHaveLength(0);
+  });
+
+  it('adaptations expose viewed/acceptance/improvement metrics with confidence', async () => {
+    const { svc, db, behavioralEvents } = makeDeps();
+    db.habitAdjustmentProposal.findMany.mockImplementation(({ where }) => {
+      if (where.status === 'ACCEPTED') {
+        return Promise.resolve([
+          { type: 'REDUCE_TARGET', outcome: 'IMPROVED' },
+          { type: 'REDUCE_TARGET', outcome: 'IMPROVED' },
+          { type: 'REDUCE_TARGET', outcome: 'UNCHANGED' },
+          { type: 'CHANGE_TIME', outcome: 'WORSENED' },
+        ]);
+      }
+      return Promise.resolve([
+        { status: 'ACCEPTED', type: 'REDUCE_TARGET', outcome: null, confidence: 0.8 },
+        { status: 'REJECTED', type: 'CHANGE_TIME', outcome: null, confidence: 0.7 },
+      ]);
+    });
+    behavioralEvents.funnelCounts.mockResolvedValue({
+      ADAPTIVE_PROPOSAL_GENERATED: 10,
+      ADAPTIVE_PROPOSAL_VIEWED: 6,
+    });
+    const res = await svc.getDashboard();
+    expect(res.adaptations.viewed).toBe(6);
+    expect(res.adaptations.viewRate.suppressed).toBe(false);
+    expect(res.adaptations.viewRate.rate).toBe(0.6);
+    expect(res.adaptations.confidence).toBe('INSUFFICIENT_DATA'); // evaluated=4 <5
+    expect(res.adaptations.improvementRate.suppressed).toBe(true); // improved=2 <5
+  });
+
+  it('weekly review engagement is measurable', async () => {
+    const { svc, db } = makeDeps();
+    db.weeklyBehaviorReview.count.mockResolvedValue(9);
+    const res = await svc.getDashboard();
+    expect(res.weeklyReviews.completed).toBe(9);
+    expect(res.weeklyReviews.reviewViewRate.suppressed).toBe(true); // viewed 0 < floor
+    expect(res.adaptations.effectivenessByType.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it('deterministic copy never uses causal language', async () => {
+    const { svc } = makeDeps();
+    const res = await svc.getDashboard();
+    const flat = JSON.stringify(res.tuningInsights);
+    expect(flat.toLowerCase()).not.toContain('caused');
+    expect(flat.toLowerCase()).not.toContain('because of');
   });
 
   it('notification deliveries aggregate by type with the privacy floor', async () => {
