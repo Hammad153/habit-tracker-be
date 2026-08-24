@@ -32,11 +32,11 @@ describe('Phase 4.3 — event retention pruning', () => {
     const cutoff = db.behavioralEvent.findMany.mock.calls[0][0].where.occurredAt.lt;
     const expectedCutoff = new Date(
       now.getTime() - RETENTION_DAYS * 86_400_000,
-    ).toISOString();
-    expect(cutoff).toBe(expectedCutoff); // 2025-08-23 boundary
+    );
+    expect(cutoff.getTime()).toBe(expectedCutoff.getTime()); // 2025-08-23
     expect(res.deletedTotal).toBe(3);
     expect(res.batches).toBe(1);
-    expect(res.cutoffDate).toBe(expectedCutoff.slice(0, 10));
+    expect(res.cutoffDate).toBe(expectedCutoff.toISOString().slice(0, 10));
   });
 
   it('recent events (just inside retention) are never selected', async () => {
