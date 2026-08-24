@@ -103,10 +103,7 @@ describe('acceptance — immutable baseline capture', () => {
     expect(arg.data.evaluationStartDate).toBe(TODAY);
     expect(arg.data.evaluationEndDate).toBe('2026-09-05'); // Day 0..13
     expect(arg.data.outcome).toBe('PENDING');
-    // Baseline is captured before updateHabit runs:
-    const updateOrder = db.habitAdjustmentProposal.update.invocationCallOrder;
-    const editOrder = db.habit ? undefined : undefined;
-    void updateOrder; void editOrder;
+    // Baseline reflects the PRE-change report (0.86, not something post-edit).
   });
 
   it('double acceptance is impossible — second sees no PENDING row', async () => {
@@ -125,10 +122,13 @@ describe('outcome evaluation — classification & idempotency', () => {
 
   it('not-yet-due proposals stay untouched (window still open)', async () => {
     const { svc, db } = makeDeps();
-    db.habitAdjustmentProposal.findMany.mockResolvedValue([]);
-    db.habitAdjustmentProposal.findMany.mockResolvedValue([
-      acceptedRow({ evaluationEndDate: '2026-12-31' }),
-    ]);
+    // Service filters due-ness via evaluationEndDate lte today; a row dated
+    // in the future would never reach the evaluator — simulate by ensuring
+    // the query filter is present and nothing comes back:
+    db.habitAdjustmentProposal.findMany.mockImplementation((args) => {
+      expect(args.where.evaluationEndDate).toEqual({ lte: TODAY });
+      return Promise.resolve([]);
+    });
     await svc.evaluateDueOutcomes('owner', 'h1');
     expect(db.habitAdjustmentProposal.updateMany).not.toHaveBeenCalled();
   });
