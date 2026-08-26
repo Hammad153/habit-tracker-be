@@ -1,5 +1,6 @@
-import { Controller, Get, Header } from '@nestjs/common';
+import { Controller, Get, Header, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { ExportService } from './export.service';
 import { CurrentUser } from '../../core/decorators/current-user.decorator';
 
@@ -19,5 +20,19 @@ export class ExportController {
   @Get('json')
   getJson(@CurrentUser() userId: string) {
     return this.exportSvc.getJson(userId);
+  }
+
+  @Get('excel')
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="habits-export.xlsx"')
+  async getExcel(@CurrentUser() userId: string, @Res() res: Response) {
+    const buffer = await this.exportSvc.getExcel(userId);
+    res.end(buffer);
+  }
+
+  @Get('pdf')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  getPdf(@CurrentUser() userId: string): Promise<string> {
+    return this.exportSvc.getPdfHtml(userId);
   }
 }
