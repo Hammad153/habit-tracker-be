@@ -61,6 +61,17 @@ export class AwardsService {
     });
     if (hasEarlyCompletion) potentialBadges.push('early-bird');
 
+    // ── Milestone: Night Owl (any completion after 10 PM) ──────────
+    const hasLateCompletion = allCompletions.some((c) => {
+      if (!c.createdAt) return false;
+      const hour = new Date(c.createdAt).getUTCHours();
+      return hour >= 22;
+    });
+    if (hasLateCompletion) potentialBadges.push('night-owl');
+
+    // ── Milestone: Dedicated (>= 50 total completions) ─────────────
+    if (completedCount >= 50) potentialBadges.push('dedicated');
+
     // ── Milestone: Perfect Week (7 consecutive 100% days) ──────────
     if (this.hasPerfectWeek(user.habits)) {
       potentialBadges.push('perfect-week');

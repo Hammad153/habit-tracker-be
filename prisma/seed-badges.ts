@@ -57,6 +57,18 @@ async function main() {
       type: BadgeType.MILESTONE,
     },
     {
+      title: 'Night Owl',
+      description: 'Completed a habit after 10 PM!',
+      icon: 'moon',
+      type: BadgeType.MILESTONE,
+    },
+    {
+      title: 'Dedicated',
+      description: 'Reached 50 total habit completions!',
+      icon: 'heart',
+      type: BadgeType.MILESTONE,
+    },
+    {
       title: 'Perfect Week',
       description: 'All habits completed every day for 7 days!',
       icon: 'star',
