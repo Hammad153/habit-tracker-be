@@ -211,7 +211,7 @@ export class ExportService {
   public async getExcel(userId: string): Promise<Buffer> {
     const user = await this.loadUserWithData(userId);
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Habit Tracker';
+    workbook.creator = 'Habita';
     workbook.created = new Date();
 
     // ── Profile sheet ──
@@ -515,7 +515,7 @@ export class ExportService {
 </head>
 <body>
 <div class="header">
-  <h1>Habit Tracker Report</h1>
+  <h1>Habita Report</h1>
   <p>${this.escHtml(user.name)} &middot; ${this.escHtml(user.email)} &middot; Generated ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
 </div>
 
@@ -560,7 +560,7 @@ export class ExportService {
 </table>
 
 <div class="footer">
-  Habit Tracker &mdash; Your data, your journey. Export generated on ${this.fmtDateTime(new Date())}
+  Habita &mdash; Your data, your journey. Export generated on ${this.fmtDateTime(new Date())}
 </div>
 </body>
 </html>`;

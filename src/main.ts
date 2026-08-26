@@ -11,8 +11,8 @@ async function bootstrap() {
   configureApp(app);
 
   const config = new DocumentBuilder()
-    .setTitle('Habit Tracker')
-    .setDescription('Manage habit, timeline, and awards')
+    .setTitle('Habita')
+    .setDescription('Behavioral change system API')
     .setVersion('1.0')
     .build();
 
