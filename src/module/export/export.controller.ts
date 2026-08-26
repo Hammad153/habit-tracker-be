@@ -23,11 +23,13 @@ export class ExportController {
   }
 
   @Get('excel')
-  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-  @Header('Content-Disposition', 'attachment; filename="habits-export.xlsx"')
   async getExcel(@CurrentUser() userId: string, @Res() res: Response) {
     const buffer = await this.exportSvc.getExcel(userId);
-    res.end(buffer);
+    res
+      .setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .setHeader('Content-Disposition', 'attachment; filename="habits-export.xlsx"')
+      .status(200)
+      .end(buffer);
   }
 
   @Get('pdf')
