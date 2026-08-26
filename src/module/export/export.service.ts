@@ -43,7 +43,7 @@ export class ExportService {
   public async getJson(userId: string) {
     const user = await this.loadUserWithData(userId);
     return {
-      exportedAt: new Date().toISOString(),
+      exportedAt: this.fmtDateTime(new Date()),
       profile: {
         id: user.id,
         name: user.name,
@@ -54,7 +54,7 @@ export class ExportService {
         longestStreak: user.longestStreak,
         totalHabits: user.totalHabits,
         completionRate: user.completionRate,
-        createdAt: user.createdAt,
+        createdAt: this.fmtDateTime(user.createdAt),
       },
       habits: user.habits.map((h) => ({
         id: h.id,
@@ -70,7 +70,7 @@ export class ExportService {
         fullBehavior: h.fullBehavior,
         minimumBehavior: h.minimumBehavior,
         isArchived: h.isArchived,
-        createdAt: h.createdAt,
+        createdAt: this.fmtDateTime(h.createdAt),
         completions: h.completions.map((c) => ({
           date: c.date,
           status: c.status,
@@ -91,15 +91,15 @@ export class ExportService {
         content: j.content,
         tags: j.tags,
         isFavorite: j.isFavorite,
-        createdAt: j.createdAt,
+        createdAt: this.fmtDateTime(j.createdAt),
       })),
       budgets: user.budgets.map((b) => ({
         id: b.id,
         title: b.title,
         amount: b.amount,
         periodType: b.periodType,
-        startDate: b.startDate,
-        endDate: b.endDate,
+        startDate: this.fmtDate(b.startDate),
+        endDate: this.fmtDate(b.endDate),
         expenses: b.expenses.map((e) => ({
           title: e.title,
           amount: e.amount,
@@ -110,14 +110,14 @@ export class ExportService {
         id: e.id,
         title: e.title,
         amount: e.amount,
-        date: e.expenseDate,
+        date: this.fmtDateTime(e.expenseDate),
         category: e.categoryId,
       })),
       incomes: user.incomes.map((i) => ({
         id: i.id,
         title: i.title,
         amount: i.amount,
-        date: i.incomeDate,
+        date: this.fmtDateTime(i.incomeDate),
       })),
       identities: user.identities.map((id) => ({
         id: id.id,
@@ -128,7 +128,7 @@ export class ExportService {
       })),
       dailyPlans: user.dailyPlans.map((dp) => ({
         id: dp.id,
-        date: dp.planDate,
+        date: this.fmtDateTime(dp.planDate),
         title: dp.title,
         note: dp.note,
         tasks: dp.tasks.map((t) => ({
@@ -145,14 +145,14 @@ export class ExportService {
         title: ub.badge.title,
         description: ub.badge.description,
         type: ub.badge.type,
-        earnedAt: ub.earnedAt,
+        earnedAt: this.fmtDateTime(ub.earnedAt),
       })),
       rewardLedger: user.rewardLedger.map((r) => ({
         id: r.id,
         amount: r.amount,
         type: r.type,
         description: r.description,
-        createdAt: r.createdAt,
+        createdAt: this.fmtDateTime(r.createdAt),
       })),
       streakFreezes: user.streakFreezes.map((sf) => ({
         habitId: sf.habitId,
@@ -231,7 +231,7 @@ export class ExportService {
       ['Total Habits', user.totalHabits],
       ['Completion Rate', `${(user.completionRate * 100).toFixed(1)}%`],
       ['Member Since', this.fmtDate(user.createdAt)],
-      ['Export Date', new Date().toISOString()],
+      ['Export Date', this.fmtDateTime(new Date())],
     ];
     profileRows.forEach(([field, value]) =>
       profileSheet.addRow({ field, value: String(value) }),
@@ -457,7 +457,7 @@ export class ExportService {
       .map(
         (j) => `
         <tr>
-          <td>${j.date}</td>
+          <td>${this.fmtDate(j.date)}</td>
           <td>${this.escHtml(j.title)}</td>
           <td>${j.mood}</td>
           <td>${this.escHtml(j.content.substring(0, 120))}${j.content.length > 120 ? '...' : ''}</td>
@@ -560,7 +560,7 @@ export class ExportService {
 </table>
 
 <div class="footer">
-  Habit Tracker &mdash; Your data, your journey. Export generated on ${new Date().toISOString()}
+  Habit Tracker &mdash; Your data, your journey. Export generated on ${this.fmtDateTime(new Date())}
 </div>
 </body>
 </html>`;
@@ -580,12 +580,25 @@ export class ExportService {
     headerRow.height = 24;
   }
 
+  /** "Aug 23, 2026" — for date-only fields */
   private fmtDate(d: Date | string): string {
     const dt = typeof d === 'string' ? new Date(d) : d;
     return dt.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
+    });
+  }
+
+  /** "Aug 23, 2026 at 9:54 PM" — for full timestamps */
+  private fmtDateTime(d: Date | string): string {
+    const dt = typeof d === 'string' ? new Date(d) : d;
+    return dt.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
     });
   }
 
