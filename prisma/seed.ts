@@ -1,4 +1,4 @@
-import { PrismaClient, BadgeType } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { prismaClientOptions } from '../src/core/database/prisma-client-options';
 
@@ -68,31 +68,7 @@ async function main() {
     });
   }
 
-  const badges: {
-    title: string;
-    description: string;
-    icon: string;
-    type: BadgeType;
-  }[] = [
-    {
-      title: '7 Day Streak',
-      description: 'Completed habits for 7 days in a row',
-      icon: 'flame',
-      type: 'STREAK',
-    },
-    {
-      title: 'Early Bird',
-      description: 'Completed 10 morning habits',
-      icon: 'sunny',
-      type: 'MILESTONE',
-    },
-  ];
-
-  for (const badge of badges) {
-    await prisma.badge.create({
-      data: badge,
-    });
-  }
+  // Badges are seeded separately via `seed-badges.ts` — do not create them here.
 
   // Reward Shop starter catalog.
   // `key` is the stable, deterministic identifier (@unique in the schema), so
