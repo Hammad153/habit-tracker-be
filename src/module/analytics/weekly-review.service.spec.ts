@@ -10,8 +10,11 @@ import { buildBehaviorReport, CompletionFact } from '../../core/utils/behavior-a
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const TODAY = '2026-08-23'; // Sunday
-const WEEK = { start: '2026-08-10', end: '2026-08-16' }; // a completed week
+const TODAY = '2026-08-23'; // Saturday
+const CREATED_AT = new Date('2026-07-01T00:00:00.000Z');
+// Account-anchored weeks from Jul 1: Week1=Jul1-7, Week2=Jul8-14, ... Week6=Aug5-11, Week7=Aug12-18, Week8=Aug19-25
+// A completed user-week (Week7: Aug12-18)
+const WEEK = { start: '2026-08-12', end: '2026-08-18' };
 
 const run = (endKey: string, count: number, skipWeekdays: number[] = []): CompletionFact[] =>
   Array.from({ length: count }, (_, i) => {
@@ -46,13 +49,19 @@ const VALID_LANGUAGE = JSON.stringify({
 const makeDeps = () => {
   const db = {
     user: {
-      findUnique: jest.fn().mockResolvedValue({
-        coachEnabled: true,
-        aiCoachEnabled: true,
-        coachTone: 'BALANCED',
-        coachFrequency: 'STANDARD',
-        weeklyReviewEnabled: true,
-        timezone: null,
+      findUnique: jest.fn().mockImplementation((args: any) => {
+        // Preferences query vs user-data query
+        if (args.select?.weeklyReviewEnabled) {
+          return Promise.resolve({
+            ...basePrefs(),
+            timezone: null,
+          });
+        }
+        // User data query (timezone + createdAt for week resolution)
+        return Promise.resolve({
+          timezone: null,
+          createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        });
       }),
     },
     habit: {
@@ -107,8 +116,8 @@ describe('WeeklyReviewService — preferences & validation', () => {
     db.user.findUnique.mockImplementation((args: any) =>
       Promise.resolve(
         args.select?.weeklyReviewEnabled
-          ? { ...basePrefs(), weeklyReviewEnabled: false }
-          : { timezone: null },
+          ? { ...basePrefs(), weeklyReviewEnabled: false, timezone: null }
+          : { timezone: null, createdAt: new Date('2026-07-01T00:00:00.000Z') },
       ),
     );
     const res = await svc.getWeeklyReview('u1');

@@ -13,7 +13,7 @@ import {
 import { buildBehaviorReport } from '../../core/utils/behavior-analytics.utils';
 import { BEHAVIOR_WINDOWS } from '../../core/utils/behavior.constants';
 import { isScheduledOnDate, shiftDayKey } from '../../core/utils/schedule.utils';
-import { localDateKeyInZone, mondayOf } from '../../core/utils/week.utils';
+import { localDateKeyInZone, mondayOf, userWeekRangeFor } from '../../core/utils/week.utils';
 import { HabitAnalyticsService } from '../analytics/habit-analytics.service';
 import { PortfolioOverloadService } from '../analytics/portfolio-overload.service';
 import { BehavioralEventService } from '../analytics/behavioral-event.service';
@@ -47,7 +47,7 @@ export class NotificationCandidatesService {
     const prefs = await this.loadPreferences(userId);
     const user = await this.databaseSvc.user.findUnique({
       where: { id: userId },
-      select: { timezone: true },
+      select: { timezone: true, createdAt: true },
     });
     const todayKey = localDateKeyInZone(user?.timezone ?? null);
     const localMinutes =
@@ -130,17 +130,20 @@ export class NotificationCandidatesService {
 
     // ---- Completed-week review availability --------------------------------
     if (prefs.weeklyReviewEnabled) {
-      const lastWeekEnd = shiftDayKey(mondayOf(todayKey), -1);
-      push(
-        {
-          type: 'WEEKLY_REVIEW_READY',
-          fingerprint: `weekly-review:${mondayOf(lastWeekEnd)}`,
-          title: 'Your week is ready',
-          body: 'See what your habits are telling you.',
-          action: { route: '/weekly-review' },
-        },
-        60,
-      );
+      const userWeek = userWeekRangeFor(user?.createdAt ?? new Date(), todayKey);
+      const weekComplete = todayKey > userWeek.range.end;
+      if (weekComplete) {
+        push(
+          {
+            type: 'WEEKLY_REVIEW_READY',
+            fingerprint: `weekly-review:${userWeek.range.start}`,
+            title: 'Your week is ready',
+            body: 'See what your habits are telling you.',
+            action: { route: '/weekly-review' },
+          },
+          60,
+        );
+      }
     }
 
     // ---- Habit-scoped candidates (bounded scan, pure analytics) ------------

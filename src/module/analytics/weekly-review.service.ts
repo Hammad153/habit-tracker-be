@@ -7,6 +7,8 @@ import { DatabaseService } from '../../core/database/database.service';
 import {
   localDateKeyInZone,
   resolveWeeklyAnalysisDate,
+  userWeekRangeFor,
+  isUserWeekComplete,
   WeekRange,
   WeeklyDateError,
 } from '../../core/utils/week.utils';
@@ -79,12 +81,53 @@ export class WeeklyReviewService {
     const prefs = await this.loadPreferences(userId);
     const user = await this.databaseSvc.user.findUnique({
       where: { id: userId },
-      select: { timezone: true },
+      select: { timezone: true, createdAt: true },
     });
-    // Real "now" in the user's zone decides week lifecycle; the ?week= param
-    // only SELECTS which week to look at.
     const realToday = localDateKeyInZone(user?.timezone ?? null);
-    const { range } = this.resolveRangeOrThrow(weekParam, user?.timezone);
+
+    let range: WeekRange;
+    let inProgress: boolean;
+
+    if (weekParam) {
+      // Explicit week param: resolve that calendar day's user-week.
+      try {
+        const resolved = resolveWeeklyAnalysisDate(weekParam, user?.timezone);
+        range = userWeekRangeFor(user?.createdAt ?? new Date(), resolved.todayKey).range;
+      } catch (err) {
+        if (err instanceof WeeklyDateError) {
+          throw new BadRequestException(err.message);
+        }
+        throw err;
+      }
+      inProgress = !(range.end < realToday);
+    } else {
+      // Default: current user-week anchored to account creation.
+      const result = userWeekRangeFor(user?.createdAt ?? new Date(), realToday);
+      range = result.range;
+      inProgress = !(range.end < realToday);
+    }
+
+    // Reject future weeks.
+    if (range.start > realToday) {
+      throw new BadRequestException('week must not be in the future');
+    }
+
+    // First week requires at least 7 days of history before a review is available.
+    const firstWeekEnd = user?.createdAt
+      ? localDateKeyInZone(
+          user.timezone ?? null,
+          new Date(user.createdAt.getTime() + 6 * 86_400_000).toISOString(),
+        )
+      : null;
+    if (firstWeekEnd && realToday < firstWeekEnd) {
+      return {
+        week: range,
+        inProgress: true,
+        enabled: true,
+        review: null,
+        ai: { provider: 'none', generated: false },
+      };
+    }
 
     if (!prefs.weeklyReviewEnabled) {
       return {
@@ -97,10 +140,7 @@ export class WeeklyReviewService {
     }
 
     const isComplete = range.end < realToday;
-    const isCurrent = realToday >= range.start && realToday <= range.end;
-    if (!isComplete && !isCurrent) {
-      throw new BadRequestException('week must not be in the future');
-    }
+    inProgress = !isComplete;
 
     // Completed weeks use the persisted lifecycle (cache-first, §25).
     if (isComplete) {
@@ -133,10 +173,25 @@ export class WeeklyReviewService {
   ): Promise<WeeklyReviewResponse> {
     const user = await this.databaseSvc.user.findUnique({
       where: { id: userId },
-      select: { timezone: true },
+      select: { timezone: true, createdAt: true },
     });
     const realToday = localDateKeyInZone(user?.timezone ?? null);
-    const { range } = this.resolveRangeOrThrow(weekParam, user?.timezone);
+
+    let range: WeekRange;
+    if (weekParam) {
+      try {
+        const resolved = resolveWeeklyAnalysisDate(weekParam, user?.timezone);
+        range = userWeekRangeFor(user?.createdAt ?? new Date(), resolved.todayKey).range;
+      } catch (err) {
+        if (err instanceof WeeklyDateError) {
+          throw new BadRequestException(err.message);
+        }
+        throw err;
+      }
+    } else {
+      range = userWeekRangeFor(user?.createdAt ?? new Date(), realToday).range;
+    }
+
     if (!(range.end < realToday)) {
       throw new BadRequestException('only completed weeks can be regenerated');
     }
@@ -340,20 +395,6 @@ export class WeeklyReviewService {
         ...(row.model ? { model: row.model } : {}),
       },
     };
-  }
-
-  private resolveRangeOrThrow(
-    weekParam: string | undefined,
-    timezone: string | null | undefined,
-  ) {
-    try {
-      return resolveWeeklyAnalysisDate(weekParam, timezone);
-    } catch (err) {
-      if (err instanceof WeeklyDateError) {
-        throw new BadRequestException(err.message);
-      }
-      throw err;
-    }
   }
 
   private async loadPreferences(userId: string) {

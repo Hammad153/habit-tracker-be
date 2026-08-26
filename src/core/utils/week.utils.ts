@@ -90,6 +90,48 @@ export const localDateKeyInZone = (
   }
 };
 
+/**
+ * Rolling 7-day week anchored to the user's account creation date.
+ *
+ * Week 1 = [createdAt, createdAt+6], Week 2 = [createdAt+7, createdAt+13], etc.
+ * This replaces calendar Mon–Sun weeks so every user gets their first review
+ * exactly7 days after sign-up, regardless of which day they joined.
+ */
+export const userWeekRangeFor = (
+  createdAt: Date,
+  todayKey: string,
+): { range: WeekRange; weekNumber: number } => {
+  const createdLocal = localDateKeyInZone(null, createdAt.toISOString());
+  const dayMs = DAY_MS;
+  const createdMs = new Date(`${createdLocal}T12:00:00.000Z`).getTime();
+  const todayMs = new Date(`${todayKey}T12:00:00.000Z`).getTime();
+  const daysSinceCreation = Math.floor((todayMs - createdMs) / dayMs);
+  if (daysSinceCreation < 0) {
+    return {
+      range: { start: createdLocal, end: shiftDayKey(createdLocal, 6) },
+      weekNumber: 1,
+    };
+  }
+  const weekIndex = Math.floor(daysSinceCreation / 7);
+  const weekStart = shiftDayKey(createdLocal, weekIndex * 7);
+  return {
+    range: { start: weekStart, end: shiftDayKey(weekStart, 6) },
+    weekNumber: weekIndex + 1,
+  };
+};
+
+/**
+ * Whether the user's current rolling week has completed (i.e. today is at
+ * least 7 days after account creation and falls outside the current week).
+ */
+export const isUserWeekComplete = (
+  createdAt: Date,
+  todayKey: string,
+): boolean => {
+  const { range } = userWeekRangeFor(createdAt, todayKey);
+  return todayKey > range.end;
+};
+
 export class WeeklyDateError extends Error {}
 
 export const daysBetweenInclusive = (startKey: string, endKey: string): number =>
