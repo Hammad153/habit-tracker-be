@@ -105,6 +105,19 @@ const makeSvc = () => {
 
 describe('SubscriptionService (Phase 3.9)', () => {
   describe('trial lifecycle', () => {
+    it('bypasses subscription paywall for ADMIN role users', async () => {
+      const { svc, db } = makeSvc();
+      db.userSubscription.findUnique.mockResolvedValue(
+        makeRow({ status: SubscriptionStatus.EXPIRED, planId: null }),
+      );
+      db.user.findUnique.mockResolvedValue({ role: 'ADMIN' });
+
+      const info = await svc.getInfo('user-admin');
+      expect(info.accessGranted).toBe(true);
+      expect(info.status).toBe(SubscriptionStatus.ACTIVE);
+      expect(info.tier).toBe('PREMIUM');
+    });
+
     it('startTrialForUser is idempotent — never restarts an existing trial', async () => {
       const { svc, db } = makeSvc();
       db.userSubscription.upsert.mockResolvedValue(makeRow());

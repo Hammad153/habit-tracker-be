@@ -180,20 +180,29 @@ export class SubscriptionService {
         })
       : row;
 
+    const user = await this.databaseSvc.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    const isAdmin = user?.role === 'ADMIN';
+
     // NO_ENTITLEMENTS for expired access is handled inside forSubscription
     // via the fallback branch; TRIALING/ACTIVE/etc. resolve normally.
     const entitlements = this.plans.forSubscription(
-      effectiveRow.status,
-      effectiveRow.planId,
+      isAdmin ? SubscriptionStatus.ACTIVE : effectiveRow.status,
+      isAdmin ? 'PREMIUM_YEARLY' : effectiveRow.planId,
     );
 
     return {
       row: effectiveRow,
-      status: effectiveRow.status,
-      accessGranted: this.isGrantedStatus(effectiveRow.status),
+      status: isAdmin ? SubscriptionStatus.ACTIVE : effectiveRow.status,
+      accessGranted: isAdmin ? true : this.isGrantedStatus(effectiveRow.status),
       entitlements,
-      tier: this.tierFor(effectiveRow),
-      plan: effectiveRow.planId
+      tier: isAdmin ? 'PREMIUM' : this.tierFor(effectiveRow),
+      plan: isAdmin
+        ? this.plans.getPaidPlan('PREMIUM_YEARLY')
+        : effectiveRow.planId
         ? this.plans.getPaidPlan(effectiveRow.planId)
         : null,
     };
