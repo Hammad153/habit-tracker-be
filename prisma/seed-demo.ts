@@ -3,13 +3,16 @@
  *
  * Creates a fully populated, screenshot-ready demo account with realistic data
  * across every major module: habits, completions, daily plans, journal entries,
- * rewards, budgets, identities, badges, notifications, and reminders.
+ * rewards, budgets, identities, badges, notifications, reminders, and weekly
+ * behavioral reviews (weeks 2–6 anchored to the account creation date).
  *
  * Usage:
  *   pnpm db:seed:demo
  *
  * This script is idempotent — running it multiple times will not create
- * duplicate records. It deletes and recreates all demo-user data on each run.
+ * duplicate records. The user row, subscription trial, and weekly reviews are
+ * upserted (updated in place by stable unique keys); everything else is wiped
+ * and re-seeded so the demo dataset always reflects the latest definition.
  */
 
 import { PrismaClient, type RewardTransactionType } from '@prisma/client';
@@ -34,6 +37,25 @@ const XP_INCREMENT_PER_LEVEL = 50;
 const DEMO_EMAIL = 'test@gmail.com';
 const DEMO_PASSWORD = 'Test@123';
 const DEMO_ID = 'demo-user-showcase';
+
+/**
+ * Demo account is created 48 days ago (UTC midnight) so the weekly-review
+ * lifecycle has real history: Week 1 = [createdAt, createdAt+6], Week N =
+ * [createdAt+(N-1)*7, createdAt+(N-1)*7+6] — matching userWeekRangeFor().
+ * The weekly reviews below anchor to this date, so seeded rows land exactly on
+ * the anchored completed weeks 2–6.
+ */
+const DEMO_CREATED_AT = daysAgo(48);
+const TRIAL_DURATION_DAYS = 7;
+
+/** Day keys for an anchored user-week (week 1 = account creation week). */
+function anchoredWeek(weekNumber: number): { weekStart: string; weekEnd: string } {
+  const startMs = DEMO_CREATED_AT.getTime() + (weekNumber - 1) * 7 * 86_400_000;
+  return {
+    weekStart: dateToStr(new Date(startMs)),
+    weekEnd: dateToStr(new Date(startMs + 6 * 86_400_000)),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Date helpers
@@ -287,7 +309,10 @@ async function main() {
 
   await cleanupDemoData();
   const user = await createDemoUser();
-  console.log('✓ Demo user created');
+  console.log('✓ Demo user created (upserted)');
+
+  const subscriptionCount = await seedSubscription(user.id);
+  console.log(`✓ ${subscriptionCount} active trial subscription`);
 
   const habitRecords = await createHabits(user.id);
   console.log(`✓ ${habitRecords.length} habits created`);
@@ -374,6 +399,7 @@ async function main() {
   console.log(`  Reminders:    ${reminderCount}`);
   console.log(`  Reviews:      ${reviewCount}`);
   console.log(`  Bundles:      ${bundleCount}`);
+  console.log(`  Subscription: TRIALING (${TRIAL_DURATION_DAYS} days)`);
   console.log(`  Level:        ${level}`);
   console.log(`  XP:           ${stats.totalXp}`);
   console.log(`  Coins:        ${finalCoins}`);
@@ -395,7 +421,8 @@ async function cleanupDemoData() {
 
   await prisma.behavioralEvent.deleteMany({ where: { userId: uid } });
   await prisma.habitAdjustmentProposal.deleteMany({ where: { userId: uid } });
-  await prisma.weeklyBehaviorReview.deleteMany({ where: { userId: uid } });
+  // weeklyBehaviorReview is NOT deleted here — it is upsert-pruned below
+  // (seedWeeklyReviews) so re-runs update rows instead of recreating them.
   await prisma.notificationDelivery.deleteMany({ where: { userId: uid } });
   await prisma.rewardRedemption.deleteMany({ where: { userId: uid } });
   await prisma.rewardLedger.deleteMany({ where: { userId: uid } });
@@ -403,6 +430,9 @@ async function cleanupDemoData() {
   await prisma.habitRewardAllocation.deleteMany({ where: { userId: uid } });
   await prisma.temptationBundle.deleteMany({ where: { userId: uid } });
   await prisma.userBadge.deleteMany({ where: { userId: uid } });
+  await prisma.subscriptionWebhookEvent.deleteMany({ where: { userId: uid } });
+  await prisma.paymentTransaction.deleteMany({ where: { userId: uid } });
+  await prisma.userSubscription.deleteMany({ where: { userId: uid } });
 
   const identities = await prisma.identity.findMany({ where: { userId: uid }, select: { id: true } });
   for (const ident of identities) {
@@ -426,9 +456,9 @@ async function cleanupDemoData() {
   await prisma.completion.deleteMany({ where: { habit: { userId: uid } } });
   await prisma.reminder.deleteMany({ where: { user: { id: uid } } });
   await prisma.habit.deleteMany({ where: { userId: uid } });
-  await prisma.user.delete({ where: { id: uid } });
+  // The demo user row itself is kept and refreshed via upsert in createDemoUser.
 
-  console.log('✓ Existing demo data cleaned up');
+  console.log('✓ Existing demo data cleaned up (user row retained)');
 }
 
 // ---------------------------------------------------------------------------
@@ -437,21 +467,59 @@ async function cleanupDemoData() {
 
 async function createDemoUser() {
   const hashedPassword = await bcrypt.hash(DEMO_PASSWORD, SALT_ROUNDS);
-  return prisma.user.create({
-    data: {
-      id: DEMO_ID,
-      name: 'Alex Morgan',
-      email: DEMO_EMAIL,
-      password: hashedPassword,
-      timezone: 'America/New_York',
-      coachEnabled: true,
-      aiCoachEnabled: true,
-      coachTone: 'BALANCED',
-      coachFrequency: 'STANDARD',
-      weeklyReviewEnabled: true,
-      level: 1, xp: 0, coins: 0, longestStreak: 0, totalHabits: 0, completionRate: 0,
+  // Upsert by the fixed demo id: re-runs refresh the account in place and
+  // never accumulate duplicate rows.
+  const base = {
+    name: 'Alex Morgan',
+    email: DEMO_EMAIL,
+    password: hashedPassword,
+    timezone: 'America/New_York',
+    coachEnabled: true,
+    aiCoachEnabled: true,
+    coachTone: 'BALANCED',
+    coachFrequency: 'STANDARD',
+    weeklyReviewEnabled: true,
+    level: 1, xp: 0, coins: 0, longestStreak: 0, totalHabits: 0, completionRate: 0,
+    createdAt: DEMO_CREATED_AT,
+  };
+  return prisma.user.upsert({
+    where: { id: DEMO_ID },
+    update: base,
+    create: { id: DEMO_ID, ...base },
+  });
+}
+
+/**
+ * Demo trial: creates/refreshes a single TRIALING row (one per user, unique
+ * userId). The account predates the trial system, so a fresh active trial is
+ * granted explicitly to keep the showcase account accessible.
+ */
+async function seedSubscription(userId: string) {
+  const now = new Date();
+  const trialEnd = new Date(now.getTime() + TRIAL_DURATION_DAYS * 86_400_000);
+  await prisma.userSubscription.upsert({
+    where: { userId },
+    update: {
+      planId: 'TRIAL',
+      status: 'TRIALING',
+      currency: 'NGN',
+      trialStartedAt: now,
+      trialEndsAt: trialEnd,
+      cancelAtPeriodEnd: false,
+      cancelledAt: null,
+      gracePeriodEndsAt: null,
+    },
+    create: {
+      userId,
+      planId: 'TRIAL',
+      status: 'TRIALING',
+      currency: 'NGN',
+      trialStartedAt: now,
+      trialEndsAt: trialEnd,
+      cancelAtPeriodEnd: false,
     },
   });
+  return 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -1090,52 +1158,99 @@ async function seedReminders(userId: string, habits: Array<{ id: string; config:
 // ---------------------------------------------------------------------------
 
 async function seedWeeklyReviews(userId: string) {
-  const reviews = [
+  // Anchored to DEMO_CREATED_AT so rows land exactly on the demo user's
+  // completed rolling weeks 2–6. Weeks relative to the anchor — a re-run that
+  // drifts by a day still updates the same (userId, weekStart) rows.
+  const reviewSpecs = [
     {
-      weekStart: dateToStr(daysAgo(41)), weekEnd: dateToStr(daysAgo(35)),
+      ...anchoredWeek(2),
       headline: 'Strong Start to the Journey',
       summary: 'Great first week! Established morning routine and maintained consistency across most habits.',
       wins: ['Completed 5/7 workout sessions', 'Meditated every day', 'Drank 3L water 6/7 days'],
       patterns: ['Morning habits are easier to maintain than evening ones', 'Energy drops significantly after 9 PM'],
+      identityReflection: 'You are becoming someone who shows up for the basics — water, movement, and a calm morning. Week one built the identity of a consistent person.',
+      nextWeekFocus: ['Protect the morning routine', 'Shift one evening habit to the morning'],
     },
     {
-      weekStart: dateToStr(daysAgo(34)), weekEnd: dateToStr(daysAgo(28)),
+      ...anchoredWeek(3),
       headline: 'Building Momentum',
       summary: 'Second week showed improvement in consistency. Deep work sessions became more productive.',
       wins: ['Perfect deep work week', 'Finished first book', 'Walking habit reached 8000 steps 5/7 days'],
       patterns: ['Deep work is most productive between 9-11 AM', 'Exercise improves sleep quality when done before 6 PM'],
+      identityReflection: 'Your identity as a reader is starting to solidify — finishing the first book is quiet but powerful evidence.',
+      nextWeekFocus: ['Keep a fixed deep work block', 'Move exercise before 6 PM on weekdays'],
     },
     {
-      weekStart: dateToStr(daysAgo(27)), weekEnd: dateToStr(daysAgo(21)),
+      ...anchoredWeek(4),
       headline: 'Overcoming the Slump',
       summary: "A challenging week with some missed days. Work deadline caused stress. Emergency minimum prevented total streak loss.",
       wins: ['Used emergency minimum instead of skipping', 'Rebounded strongly on Friday', 'Journaling helped process stress'],
       patterns: ['Stress correlates with missed evening habits', 'Emergency minimum is a lifesaver during busy weeks'],
+      identityReflection: 'A week of deadlines did not break who you are becoming. Using the emergency minimum proved the habit identity holds under pressure.',
+      nextWeekFocus: ['Plan journaling before high-stress days', 'Rebound plan for missed evenings'],
     },
     {
-      weekStart: dateToStr(daysAgo(20)), weekEnd: dateToStr(daysAgo(14)),
+      ...anchoredWeek(5),
       headline: 'Recovery and Growth',
       summary: "Bounced back from last week's difficulties. Added Arabic vocabulary as a new habit. Deep work sessions hit peak productivity.",
       wins: ['New Arabic habit started strong', '7 consecutive workout days', 'Reading streak reached 14 days'],
       patterns: ['Adding new habits reinvigorates motivation', 'Consistent bedtime improves morning energy'],
+      identityReflection: 'You are building a multilingual, physically consistent identity — the two-week streak is your strongest evidence yet.',
+      nextWeekFocus: ['Maintain Arabic vocabulary streak', 'Keep the 9:30 PM bedtime'],
     },
     {
-      weekStart: dateToStr(daysAgo(13)), weekEnd: dateToStr(daysAgo(7)),
+      ...anchoredWeek(6),
       headline: 'Peak Performance Week',
       summary: 'The best week so far! Completed all habits on 3 out of 7 days. Meditation breakthrough. Identity shift toward "fitness person" is real.',
       wins: ['3 perfect days in one week', 'Meditation breakthrough', 'Longest water tracking streak: 14 days', 'Earned Centurion badge (100 completions)'],
       patterns: ['Perfect days cluster around low-stress workdays', 'Morning routine completion predicts overall daily success'],
+      identityReflection: 'You are a fitness person now — not hoping to become one. Three perfect days and a 14-day water streak are the evidence.',
+      nextWeekFocus: ['Aim for 4 perfect days', 'Improve sleep consistency', 'Protect the 100-completion badge momentum'],
     },
   ];
 
-  await prisma.weeklyBehaviorReview.createMany({
-    data: reviews.map((r) => ({
-      userId, ...r, status: 'READY', provider: 'seeded', generated: true,
-      identityReflection: 'Identity habits are reinforcing consistently.',
-      nextWeekFocus: ['Improve sleep consistency', 'Maintain Arabic vocabulary streak', 'Aim for 4 perfect days'],
-    })),
-  });
-  return reviews.length;
+  const weekStarts = reviewSpecs.map((r) => r.weekStart);
+
+  // Upsert each anchored week in place and prune weeks that are no longer part
+  // of the seeded set — re-running updates rows instead of duplicating them.
+  await prisma.$transaction([
+    ...reviewSpecs.map((r) =>
+      prisma.weeklyBehaviorReview.upsert({
+        where: { userId_weekStart: { userId, weekStart: r.weekStart } },
+        update: {
+          weekEnd: r.weekEnd,
+          status: 'READY',
+          provider: 'seeded',
+          generated: true,
+          headline: r.headline,
+          summary: r.summary,
+          wins: r.wins,
+          patterns: r.patterns,
+          identityReflection: r.identityReflection,
+          nextWeekFocus: r.nextWeekFocus,
+        },
+        create: {
+          userId,
+          weekStart: r.weekStart,
+          weekEnd: r.weekEnd,
+          status: 'READY',
+          provider: 'seeded',
+          generated: true,
+          headline: r.headline,
+          summary: r.summary,
+          wins: r.wins,
+          patterns: r.patterns,
+          identityReflection: r.identityReflection,
+          nextWeekFocus: r.nextWeekFocus,
+        },
+      }),
+    ),
+    prisma.weeklyBehaviorReview.deleteMany({
+      where: { userId, NOT: { weekStart: { in: weekStarts } } },
+    }),
+  ]);
+
+  return reviewSpecs.length;
 }
 
 // ---------------------------------------------------------------------------
