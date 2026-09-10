@@ -135,6 +135,7 @@ model User {
   name                     String
   email                    String                    @unique
   role                     Role                      @default(USER)
+  isSuspended              Boolean                   @default(false)
   password                 String
   refreshToken             String?
   resetToken               String?
@@ -183,6 +184,27 @@ model User {
   subscription             UserSubscription?
   paymentTransactions      PaymentTransaction[]
   webhookEvents            SubscriptionWebhookEvent[]
+  auditLogs                AuditLog[]
+
+  @@index([role, isSuspended])
+  @@index([createdAt])
+}
+
+/// Administrative audit log for tracking sensitive administrative operations.
+model AuditLog {
+  id         String   @id @default(cuid())
+  adminId    String
+  admin      User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  action     String   // e.g. "ADMIN_LOGIN", "USER_SUSPEND", "USER_REACTIVATE", "SHOP_ITEM_CREATE", "SHOP_ITEM_UPDATE"
+  targetType String?  // e.g. "USER", "REWARD_ITEM", "SYSTEM"
+  targetId   String?
+  details    Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
 }
 
 /// Phase 4.1 — immutable behavioral intent/outcome event ledger.

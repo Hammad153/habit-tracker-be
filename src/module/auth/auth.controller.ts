@@ -35,6 +35,13 @@ export class AuthController {
   }
 
   @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('admin/login')
+  adminSignIn(@Body() signInDto: LoginDto) {
+    return this.authService.adminSignIn(signInDto.email, signInDto.password);
+  }
+
+  @Public()
   @Post('signup')
   @ApiSignUpDocs()
   signUp(@Body() signUpDto: SignUpDto) {

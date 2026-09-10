@@ -43,9 +43,11 @@ export class SubscriptionAccessGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const userId: string | undefined = request?.user?.sub;
+    const role: string | undefined = request?.user?.role;
     if (!userId) return true; // AuthGuard enforces authentication.
 
-    if (this.devBypassEnabled()) return true;
+    // Admins and development bypass bypass subscription gating.
+    if (role === 'ADMIN' || this.devBypassEnabled()) return true;
 
     const bypass = this.reflector.getAllAndOverride<boolean>(
       SUBSCRIPTION_GATE_BYPASS_KEY,

@@ -30,6 +30,7 @@ import { DailyPlanModule } from './module/daily-plan/daily-plan.module';
 import { JournalModule } from './module/journal/journal.module';
 import { IdentityModule } from './module/identity/identity.module';
 import { RewardsModule } from './module/rewards/rewards.module';
+import { AdminModule } from './module/admin/admin.module';
 import { DomainEventsModule } from './core/events/domain-events.module';
 import { configValidationSchema } from './core/config/config.validation';
 
@@ -39,6 +40,7 @@ import { configValidationSchema } from './core/config/config.validation';
     DatabaseModule,
     MyLoggerModule,
     AuthModule,
+    AdminModule,
     ThrottlerModule.forRoot({
       throttlers: [
         { name: 'short', ttl: 1000, limit: 10 },
