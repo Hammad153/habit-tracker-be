@@ -113,7 +113,7 @@ export class AuthService {
 
     await this.userSvc.updateResetToken(user.id, tokenDigest, resetTokenExpiry);
 
-    const appName = this.configSvc.get<string>('APP_NAME') || 'Habita';
+    const appName = this.configSvc.get<string>('APP_NAME') || 'Routina';
     const appScheme =
       this.configSvc.get<string>('APP_DEEP_LINK_SCHEME') || 'habittracker';
     const resetUrl = `${appScheme}://reset-password?token=${resetToken}`;

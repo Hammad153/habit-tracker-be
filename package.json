@@ -21,6 +21,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:seed": "ts-node --transpile-only -r tsconfig-paths/register prisma/seed.ts",
     "db:seed-badges": "ts-node --transpile-only -r tsconfig-paths/register prisma/seed-badges.ts",
+    "db:seed:demo": "ts-node --transpile-only -r tsconfig-paths/register prisma/seed-demo.ts",
     "db:repair-budget-links": "ts-node --transpile-only -r tsconfig-paths/register prisma/repair-budget-links.ts",
     "db:migrate": "npx prisma migrate dev",
     "db:push": "npx prisma db push && npx prisma generate"

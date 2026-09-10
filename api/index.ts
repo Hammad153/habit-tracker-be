@@ -16,10 +16,10 @@ const bootstrap = async () => {
   configureApp(app);
 
   const config = new DocumentBuilder()
-    .setTitle('Habita')
+    .setTitle('Routina')
     .setDescription('Behavioral change system API')
     .setVersion('1.0')
-    .addTag('habita')
+    .addTag('Routina')
     .addBearerAuth()
     .build();
 
