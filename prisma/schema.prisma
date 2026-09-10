@@ -9,6 +9,30 @@ enum Role {
   ADMIN
 }
 
+/// Subscription lifecycle for the Paystack-backed monetization flow.
+/// Lone initial 7-day TRIALING period -> subscription required -> pay to continue.
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  NON_RENEWING
+  PAST_DUE
+  PAYMENT_FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REVERSED
+}
+
 enum BehavioralEventType {
   INTERVENTION_GENERATED
   INTERVENTION_VIEWED
@@ -156,6 +180,9 @@ model User {
   habitAdjustmentProposals HabitAdjustmentProposal[]
   notificationDeliveries   NotificationDelivery[]
   behavioralEvents         BehavioralEvent[]
+  subscription             UserSubscription?
+  paymentTransactions      PaymentTransaction[]
+  webhookEvents            SubscriptionWebhookEvent[]
 }
 
 /// Phase 4.1 — immutable behavioral intent/outcome event ledger.
@@ -687,4 +714,78 @@ model UserBadge {
   badge    Badge    @relation(fields: [badgeId], references: [id])
 
   @@unique([userId, badgeId])
+}
+
+/// One active subscription per user (1:1). The 7-day trial starts at account
+/// creation; paid plans are activated only after server-side Paystack
+/// verification or an authenticated webhook event.
+model UserSubscription {
+  id                        String              @id @default(cuid())
+  userId                    String              @unique
+  user                      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Routina plan id: TRIAL | BASIC_MONTHLY | BASIC_YEARLY | PREMIUM_MONTHLY | PREMIUM_YEARLY
+  planId                    String              @default("TRIAL")
+  status                    SubscriptionStatus  @default(TRIALING)
+  billingInterval           BillingInterval?
+  // Price in whole Naira at subscription time (display + reconciliation).
+  amountNaira               Int?
+  currency                  String              @default("NGN")
+  trialStartedAt            DateTime?
+  trialEndsAt               DateTime?
+  currentPeriodStart        DateTime?
+  currentPeriodEnd          DateTime?
+  // User cancelled future renewal; access continues until currentPeriodEnd.
+  cancelAtPeriodEnd         Boolean             @default(false)
+  cancelledAt               DateTime?
+  // Payment-failure grace window (SUBSCRIPTION_GRACE_PERIOD_DAYS). Access is
+  // retained during the grace period so the user can update their payment method.
+  gracePeriodEndsAt         DateTime?
+  // Paystack identifiers. Payment credentials never touch this database.
+  paystackCustomerCode      String?
+  paystackSubscriptionCode  String?
+  paystackPlanCode          String?
+  paystackAuthorizationCode String?
+  // Latest charge reference that activated/extended this subscription.
+  lastPaymentReference      String?
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+
+  @@index([status])
+  @@index([trialEndsAt])
+}
+
+/// Append-only record of real-money checkout attempts (Paystack-backed).
+/// `reference` is the external Paystack transaction reference (unique), which
+/// makes payment verification and webhook reconciliation idempotent.
+model PaymentTransaction {
+  id              String          @id @default(cuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reference       String          @unique
+  planId          String
+  billingInterval BillingInterval
+  amountNaira     Int
+  currency        String          @default("NGN")
+  status          PaymentStatus   @default(PENDING)
+  channel         String?
+  metadata        Json?
+  paidAt          DateTime?
+  createdAt       DateTime        @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+/// Paystack webhook event ledger. `dedupeKey` (event + payload reference) is
+/// unique so retried webhook deliveries are processed exactly once.
+model SubscriptionWebhookEvent {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  event       String
+  dedupeKey   String   @unique
+  payload     Json
+  processedAt DateTime @default(now())
+
+  @@index([event, processedAt])
 }

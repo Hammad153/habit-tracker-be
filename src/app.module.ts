@@ -18,6 +18,7 @@ import { ConfigModule } from '@nestjs/config';
 import { MailerModule } from './module/mailer/mailer.module';
 import { TemplateModule } from './module/template/template.module';
 import { SubscriptionModule } from './module/subscription/subscription.module';
+import { SubscriptionAccessGuard } from './module/subscription/subscription-access.guard';
 import { AnalyticsModule } from './module/analytics/analytics.module';
 import { InterventionModule } from './module/intervention/intervention.module';
 import { AiProviderModule } from './core/ai/ai-provider.module';
@@ -79,6 +80,9 @@ import { configValidationSchema } from './core/config/config.validation';
     { provide: APP_GUARD, useExisting: AuthGuard },
     // Order matters: Throttler -> AuthGuard -> RolesGuard -> Controller.
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Server-authoritative subscription paywall + premium feature entitlements.
+    // Runs last (after roles) so it sees the authenticated user.
+    { provide: APP_GUARD, useClass: SubscriptionAccessGuard },
   ],
 })
 export class AppModule {}

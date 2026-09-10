@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { MailerService } from '../mailer/mailer.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { User } from '@prisma/client';
@@ -16,10 +17,15 @@ export class AuthService {
     private readonly jwtSvc: JwtService,
     private readonly userSvc: UsersService,
     private readonly mailerSvc: MailerService,
+    private readonly subscriptionSvc: SubscriptionService,
   ) {}
 
   async signUp(data: any) {
     const user = await this.userSvc.create(data);
+    // Every new account receives a single 7-day free trial (idempotent —
+    // repeat signups / races never restart the trial based on the account
+    // createdAt, not on this moment).
+    await this.subscriptionSvc.startTrialForUser(user.id);
     const tokens = await this.generateTokens(user);
     await this.userSvc.updateRefreshToken(user.id, tokens.refresh_token);
     return { ...tokens, user: this.sanitizeUser(user) };

@@ -5,10 +5,12 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateCoachPreferencesDto } from './dto/coach-preferences.dto';
 import { CurrentUser } from '../../core/decorators/current-user.decorator';
+import { BypassSubscriptionGate } from '../subscription/decorators/bypass-subscription-gate.decorator';
 
 @ApiTags('Profile')
 @ApiBearerAuth()
 @Controller('profile')
+@BypassSubscriptionGate()
 export class ProfileController {
   constructor(private readonly profileService: ProfileService) {}
 

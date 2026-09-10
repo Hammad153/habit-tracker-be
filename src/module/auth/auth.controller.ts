@@ -17,10 +17,12 @@ import { Public } from '../../core/decorators/public.decorator';
 import { LoginDto } from './dto/login.dto';
 import { SignUpDto } from './dto/signup.dto';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/forgot-password.dto';
+import { BypassSubscriptionGate } from '../subscription/decorators/bypass-subscription-gate.decorator';
 
 @ApiTags('Auth')
 @ApiBearerAuth()
 @Controller('auth')
+@BypassSubscriptionGate()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

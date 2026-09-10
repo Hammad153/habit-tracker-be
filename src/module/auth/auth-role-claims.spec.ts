@@ -38,6 +38,7 @@ const makeAuth = (
     jwtSvc as unknown as JwtService,
     userSvc as unknown as UsersService,
     mailerSvc,
+    { startTrialForUser: jest.fn().mockResolvedValue(undefined) } as any,
   );
   return { auth, captured, userSvc, jwtSvc };
 };

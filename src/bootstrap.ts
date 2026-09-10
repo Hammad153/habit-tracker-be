@@ -17,8 +17,17 @@ export function configureApp(app: INestApplication): void {
   // Security headers (CSP, X-Frame-Options, no-sniff, HSTS, etc.)
   app.use(helmet());
 
-  // Bound request body size to mitigate large-payload abuse.
-  app.use(express.json({ limit: '1mb' }));
+  // Bound request body size to mitigate large-payload abuse. The raw body is
+  // captured for Paystack webhook HMAC signature verification (the signature
+  // is computed over the exact bytes Paystack sent).
+  app.use(
+    express.json({
+      limit: '1mb',
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
   app.use('/uploads', express.static('uploads'));
 
   // CORS: restrict to an explicit allow-list when configured, otherwise reflect

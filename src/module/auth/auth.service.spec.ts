@@ -39,12 +39,17 @@ describe('AuthService refresh lifecycle', () => {
     sendEmail: jest.fn(),
   };
 
+  const subscriptionSvc = {
+    startTrialForUser: jest.fn().mockResolvedValue(undefined),
+  };
+
   const service = () =>
     new AuthService(
       configSvc as any,
       jwtSvc as any,
       userSvc as any,
       mailerSvc as any,
+      subscriptionSvc as any,
     );
 
   beforeEach(() => {
