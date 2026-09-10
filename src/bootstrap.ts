@@ -30,15 +30,10 @@ export function configureApp(app: INestApplication): void {
   );
   app.use('/uploads', express.static('uploads'));
 
-  // CORS: restrict to an explicit allow-list when configured, otherwise reflect
-  // the request origin (native mobile clients send no Origin header, so this is
-  // safe for the app; web deployments should set CORS_ORIGINS).
-  const origins = (process.env.CORS_ORIGINS || '')
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
+  // Reflect every request origin so credentialed browser requests are allowed.
+  // A literal '*' cannot be used with credentials: true.
   app.enableCors({
-    origin: origins.length ? origins : true,
+    origin: true,
     credentials: true,
   });
 
