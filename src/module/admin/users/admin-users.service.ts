@@ -298,11 +298,10 @@ export class AdminUsersService {
     }
 
     await this.subscriptionSvc.getEffectiveSubscription(userId);
-    const before = await this.db.userSubscription.findUnique({
-      where: { userId },
-    });
+    const subscriptionDb = this.db.userSubscription as any;
+    const before = await subscriptionDb.findUnique({ where: { userId } });
     const enabled = Boolean(dto.freeAccessEnabled);
-    const updated = await this.db.userSubscription.update({
+    const updated = await subscriptionDb.update({
       where: { userId },
       data: enabled
         ? {
