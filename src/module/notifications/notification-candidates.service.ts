@@ -428,9 +428,16 @@ export class NotificationCandidatesService {
   }
 
   /** Server-side hourly dispatch for users who have opted into re-engagement. */
-  public async dispatchReengagement(): Promise<{ attempted: number; sent: number }> {
+  public async dispatchReengagement(): Promise<{
+    attempted: number;
+    sent: number;
+  }> {
     const users = await this.databaseSvc.user.findMany({
-      where: { pushToken: { not: null }, reengagementEnabled: true, isSuspended: false },
+      where: {
+        pushToken: { not: null },
+        reengagementEnabled: true,
+        isSuspended: false,
+      },
       select: { id: true, pushToken: true },
       take: 500,
     });
@@ -464,7 +471,9 @@ export class NotificationCandidatesService {
           ]);
           sent += 1;
         } catch (error) {
-          this.logger.warn(`Re-engagement delivery failed: ${String(error).slice(0, 120)}`);
+          this.logger.warn(
+            `Re-engagement delivery failed: ${String(error).slice(0, 120)}`,
+          );
         }
       }
     }

@@ -1,12 +1,17 @@
-import { Body, Controller, Get, Headers, Post, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Public } from '../../core/decorators/public.decorator';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../core/decorators/current-user.decorator';
 import { MarkDeliveredDto } from './dto/candidates.dto';
-import {
-  NotificationCandidatesService,
-} from './notification-candidates.service';
+import { NotificationCandidatesService } from './notification-candidates.service';
 
 @ApiTags('Notifications')
 @ApiBearerAuth()

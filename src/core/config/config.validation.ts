@@ -36,10 +36,7 @@ export const configValidationSchema = Joi.object({
   // Grace window (days) after a failed renewal before access expires — 3 by
   // default. During grace, the user is marked PAYMENT_FAILED but can still use
   // the app; after it, access lapses to EXPIRED (data is never deleted).
-  SUBSCRIPTION_GRACE_PERIOD_DAYS: Joi.number()
-    .integer()
-    .min(0)
-    .default(3),
+  SUBSCRIPTION_GRACE_PERIOD_DAYS: Joi.number().integer().min(0).default(3),
   // Dev-only escape hatch: `true` bypasses the paywall for ALL requests.
   // Production must keep this unset / false.
   SUBSCRIPTION_DEV_BYPASS: Joi.boolean().default(false),
