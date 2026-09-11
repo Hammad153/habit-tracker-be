@@ -28,14 +28,19 @@ describe('cadence — frequency policy (spec §6)', () => {
       evaluateCadence({ ...minimal, interventionPriority: 100 }).eligible,
     ).toBe(true);
     expect(
-      evaluateCadence({ ...minimal, type: 'RECOVERY_NEEDED', interventionPriority: 80 })
-        .eligible,
+      evaluateCadence({
+        ...minimal,
+        type: 'RECOVERY_NEEDED',
+        interventionPriority: 80,
+      }).eligible,
     ).toBe(false); // below MINIMAL floor of 90
   });
 
   it('STANDARD surfaces the normal engine range', () => {
     expect(evaluateCadence(base).eligible).toBe(true);
-    expect(evaluateCadence({ ...base, interventionPriority: 70 }).eligible).toBe(true);
+    expect(
+      evaluateCadence({ ...base, interventionPriority: 70 }).eligible,
+    ).toBe(true);
   });
 
   it('FREQUENT surfaces identity/momentum lows too', () => {
@@ -50,17 +55,26 @@ describe('cadence — frequency policy (spec §6)', () => {
   });
 
   it('unknown frequency degrades to STANDARD semantics', () => {
-    expect(evaluateCadence({ ...base, coachFrequency: 'WILD' }).eligible).toBe(true);
+    expect(evaluateCadence({ ...base, coachFrequency: 'WILD' }).eligible).toBe(
+      true,
+    );
     expect(
-      evaluateCadence({ ...base, coachFrequency: 'WILD', interventionPriority: 60 })
-        .eligible,
+      evaluateCadence({
+        ...base,
+        coachFrequency: 'WILD',
+        interventionPriority: 60,
+      }).eligible,
     ).toBe(false);
   });
 });
 
 describe('cadence — CRITICAL bypass & preference gates', () => {
   it('CRITICAL bypasses frequency suppression', () => {
-    const r = evaluateCadence({ ...base, coachFrequency: 'MINIMAL', interventionPriority: 100 });
+    const r = evaluateCadence({
+      ...base,
+      coachFrequency: 'MINIMAL',
+      interventionPriority: 100,
+    });
     expect(r.eligible).toBe(true);
     expect(r.priority).toBe('URGENT');
     expect(r.reason).toBe('critical-bypass');
@@ -88,6 +102,20 @@ describe('cadence — CRITICAL bypass & preference gates', () => {
     expect(review.reason).toBe('weekly-review-disabled');
     // Habit insight unaffected by the weekly toggle:
     expect(evaluateCadence(off).eligible).toBe(true);
+  });
+
+  it('reengagementEnabled=false blocks only re-engagement candidates', () => {
+    const off = {
+      ...base,
+      type: 'REENGAGEMENT' as const,
+      interventionPriority: 84,
+      reengagementEnabled: false,
+    };
+    expect(evaluateCadence(off).eligible).toBe(false);
+    expect(evaluateCadence(off).reason).toBe('reengagement-disabled');
+    expect(
+      evaluateCadence({ ...off, reengagementEnabled: true }).eligible,
+    ).toBe(true);
   });
 });
 
@@ -134,9 +162,9 @@ describe('cadence — timing & timezone inputs', () => {
     expect(inQuietHours(7 * 60 + 30)).toBe(false); // end-exclusive
     expect(inQuietHours(21 * 60 + 59)).toBe(false);
 
-    expect(
-      evaluateCadence({ ...base, localMinutes: 23 * 60 }).reason,
-    ).toBe('quiet-hours');
+    expect(evaluateCadence({ ...base, localMinutes: 23 * 60 }).reason).toBe(
+      'quiet-hours',
+    );
     expect(
       evaluateCadence({ ...base, localMinutes: 7 * 60 + 30 }).eligible,
     ).toBe(true);

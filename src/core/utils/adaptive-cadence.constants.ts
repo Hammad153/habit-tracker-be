@@ -17,6 +17,7 @@ export const NOTIFICATION_TYPES = [
   'ADAPTATION_OUTCOME',
   'WEEKLY_REVIEW_READY',
   'IDENTITY_REINFORCEMENT',
+  'REENGAGEMENT',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -28,7 +29,7 @@ export const PRIORITY_MAP: Record<number, NotificationPriority> = {
   100: 'URGENT', // CRITICAL risk recovery
   92: 'HIGH', // REDUCE_DIFFICULTY
   88: 'HIGH', // weekday (high band)
-  84: 'NORMAL', // CHANGE_TIME
+  84: 'NORMAL', // CHANGE_TIME / REENGAGEMENT
   82: 'HIGH', // OVERLOAD
   80: 'NORMAL', // DECLINING recovery
   78: 'NORMAL', // AT_RISK nudge
@@ -50,6 +51,7 @@ export const COOLDOWN_DAYS: Record<NotificationType, number> = {
   ADAPTATION_OUTCOME: 365, // one-shot per evaluated proposal fingerprint
   WEEKLY_REVIEW_READY: 8, // ISO-week cadence with slack
   IDENTITY_REINFORCEMENT: 10,
+  REENGAGEMENT: 2,
 };
 
 /** Default quiet hours in the USER'S local wall clock (24h minutes). */

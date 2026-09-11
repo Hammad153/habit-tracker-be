@@ -3,14 +3,21 @@ import { PortfolioOverloadService } from '../analytics/portfolio-overload.servic
 import { HabitAnalyticsService } from '../analytics/habit-analytics.service';
 import { DatabaseService } from '../../core/database/database.service';
 import type { AiProvider } from '../../core/ai/ai-provider.interface';
-import {
-  NotificationCandidatesService,
-} from './notification-candidates.service';
+import { NotificationCandidatesService } from './notification-candidates.service';
 
 // ---------------------------------------------------------------------------
 beforeAll(() => {
   jest.useFakeTimers({
-    doNotFake: ['nextTick', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'queueMicrotask', 'performance'],
+    doNotFake: [
+      'nextTick',
+      'setTimeout',
+      'clearTimeout',
+      'setInterval',
+      'clearInterval',
+      'setImmediate',
+      'queueMicrotask',
+      'performance',
+    ],
   });
   jest.setSystemTime(new Date('2026-08-23T12:00:00.000Z')); // Sunday noon UTC
 });
@@ -59,7 +66,11 @@ const strugglingReport = (title: string) => ({
   },
   timezoneUsed: 'UTC',
   momentum: { score: 0.3, level: 'FADING' },
-  risk: { score: 0.66, level: 'HIGH', reasons: ['7 of 10 missed in the last week'] },
+  risk: {
+    score: 0.66,
+    level: 'HIGH',
+    reasons: ['7 of 10 missed in the last week'],
+  },
   signals: ['AT_RISK', 'TOO_HARD'],
   structuredSignals: [],
 });
@@ -101,9 +112,11 @@ const makeDeps = () => {
     },
     notificationDelivery: {
       findMany: jest.fn().mockResolvedValue([]),
-      upsert: jest.fn().mockImplementation(({ where }) =>
-        Promise.resolve({ id: 'x', ...where.userId_fingerprint }),
-      ),
+      upsert: jest
+        .fn()
+        .mockImplementation(({ where }) =>
+          Promise.resolve({ id: 'x', ...where.userId_fingerprint }),
+        ),
     },
     habitAdjustmentProposal: {
       findFirst: jest.fn().mockResolvedValue(null),
@@ -111,7 +124,9 @@ const makeDeps = () => {
     },
   };
   const analytics = {
-    getHabitBehaviorReport: jest.fn().mockResolvedValue(strugglingReport('Run')),
+    getHabitBehaviorReport: jest
+      .fn()
+      .mockResolvedValue(strugglingReport('Run')),
   };
   const overloadSvc = {
     getOverloadReport: jest.fn().mockResolvedValue({
@@ -124,7 +139,9 @@ const makeDeps = () => {
       averageMissRate30: 0.46,
       averageCompletionRate30: 0.54,
       contributors: [],
-      contributingFactors: ['5 of 7 analyzed habits are HIGH or CRITICAL risk.'],
+      contributingFactors: [
+        '5 of 7 analyzed habits are HIGH or CRITICAL risk.',
+      ],
       confidence: 'HIGH',
       insight: {
         headline: 'You are carrying a lot right now',
@@ -133,7 +150,12 @@ const makeDeps = () => {
       },
     }),
   };
-  const aiProvider = { name: 'nvidia', model: null, generateRawText: jest.fn(), generateCoachResponse: jest.fn() };
+  const aiProvider = {
+    name: 'nvidia',
+    model: null,
+    generateRawText: jest.fn(),
+    generateCoachResponse: jest.fn(),
+  };
   const behavioralEvents = {
     recordCandidateGenerated: jest.fn().mockResolvedValue(undefined),
     recordDelivered: jest.fn().mockResolvedValue(undefined),
@@ -171,17 +193,69 @@ describe('notification candidates — surfacing & ranking', () => {
       expect(c.action.route).toBe('/habit-detail?habitId=h1');
     }
     if (types.includes('DIFFICULTY_TOO_HIGH')) {
-      expect(res.find((x) => x.type === 'DIFFICULTY_TOO_HIGH')!.fingerprint).toContain(':92:');
+      expect(
+        res.find((x) => x.type === 'DIFFICULTY_TOO_HIGH')!.fingerprint,
+      ).toContain(':92:');
     }
+  });
+
+  it('streak-aware due habit surfaces a REENGAGEMENT candidate', async () => {
+    const deps = makeDeps();
+    deps.db.habit.findMany.mockResolvedValueOnce([
+      {
+        id: 'h1',
+        title: 'Run',
+        goal: 5,
+        scheduleType: 'daily',
+        scheduleDays: [],
+        timesPerWeek: null,
+        intervalDays: null,
+        scheduledTime: '20:00',
+        startDate: null,
+        completions: Array.from({ length: 54 }, (_, index) => ({
+          date: new Date(Date.UTC(2026, 7, 22 - index))
+            .toISOString()
+            .slice(0, 10),
+          value: 1,
+          kind: 'FULL',
+        })),
+      },
+    ]);
+    deps.overloadSvc.getOverloadReport.mockResolvedValue({
+      overloaded: false,
+      score: 0,
+      activeHabitCount: 1,
+      analyzedHabitCount: 1,
+      atRiskHabitCount: 0,
+      highRiskHabitCount: 0,
+      averageMissRate30: 0,
+      averageCompletionRate30: 1,
+      contributors: [],
+      contributingFactors: [],
+      confidence: 'HIGH',
+      insight: { headline: '', message: '', ctaLabel: '' },
+    });
+    const res = await deps.svc.getCandidates('owner');
+    const candidate = res.find((item) => item.type === 'REENGAGEMENT');
+    expect(candidate).toBeDefined();
+    expect(candidate!.body).toContain('54-day streak');
+    expect(candidate!.action.route).toBe('/habit-detail?habitId=h1');
   });
 
   it('weekly review candidate uses ISO-week fingerprint and review route', async () => {
     // Overload off so review is easy to find.
     const deps = makeDeps();
     deps.overloadSvc.getOverloadReport.mockResolvedValue({
-      overloaded: false, score: 0, activeHabitCount: 2, analyzedHabitCount: 2,
-      atRiskHabitCount: 0, highRiskHabitCount: 0, averageMissRate30: 0.1,
-      averageCompletionRate30: 0.9, contributors: [], contributingFactors: [],
+      overloaded: false,
+      score: 0,
+      activeHabitCount: 2,
+      analyzedHabitCount: 2,
+      atRiskHabitCount: 0,
+      highRiskHabitCount: 0,
+      averageMissRate30: 0.1,
+      averageCompletionRate30: 0.9,
+      contributors: [],
+      contributingFactors: [],
       confidence: 'HIGH',
       insight: { headline: '', message: '', ctaLabel: '' },
     });
@@ -198,8 +272,12 @@ describe('notification candidates — surfacing & ranking', () => {
     // Call order inside the service: pending proposal first, then outcome.
     db.habitAdjustmentProposal.findFirst
       .mockResolvedValueOnce({
-        id: 'prop-9', habitId: 'h1', type: 'REDUCE_TARGET',
-        confidence: 0.8, reason: 'Your km target has been completed at 43% over the last 30 days.',
+        id: 'prop-9',
+        habitId: 'h1',
+        type: 'REDUCE_TARGET',
+        confidence: 0.8,
+        reason:
+          'Your km target has been completed at 43% over the last 30 days.',
         createdAt: new Date(),
       })
       .mockResolvedValueOnce(null);
@@ -215,9 +293,13 @@ describe('notification candidates — surfacing & ranking', () => {
     db.habitAdjustmentProposal.findFirst
       .mockResolvedValueOnce(null) // pending proposal lookup
       .mockResolvedValueOnce({
-        id: 'prop-5', outcome: 'IMPROVED', habitId: 'h1',
-        baselineCompletionRate: 0.48, postCompletionRate: 0.74,
-        resolvedAt: new Date(), acceptedAt: new Date(),
+        id: 'prop-5',
+        outcome: 'IMPROVED',
+        habitId: 'h1',
+        baselineCompletionRate: 0.48,
+        postCompletionRate: 0.74,
+        resolvedAt: new Date(),
+        acceptedAt: new Date(),
       });
     const res = await svc.getCandidates('owner');
     const outcome = res.find((c) => c.type === 'ADAPTATION_OUTCOME');
@@ -237,13 +319,18 @@ describe('notification candidates — preferences & spam safety', () => {
   it('coach disabled suppresses habit/overload insights entirely', async () => {
     const { svc, db } = makeDeps();
     db.user.findUnique.mockResolvedValue({
-      timezone: null, coachEnabled: false, aiCoachEnabled: true,
-      coachFrequency: 'FREQUENT', weeklyReviewEnabled: true,
+      timezone: null,
+      coachEnabled: false,
+      aiCoachEnabled: true,
+      coachFrequency: 'FREQUENT',
+      weeklyReviewEnabled: true,
     });
     const res = await svc.getCandidates('owner');
     expect(res.find((c) => c.type === 'OVERLOAD_DETECTED')).toBeUndefined();
     expect(
-      res.every((c) => ['WEEKLY_REVIEW_READY'].includes(c.type) === false || true),
+      res.every(
+        (c) => ['WEEKLY_REVIEW_READY'].includes(c.type) === false || true,
+      ),
     ).toBe(true);
   });
 
@@ -253,7 +340,9 @@ describe('notification candidates — preferences & spam safety', () => {
       { fingerprint: 'overload:owner:2026-08-17', dayKey: '2026-08-20' },
     ]);
     const res = await svc.getCandidates('owner');
-    expect(res.find((c) => c.fingerprint === 'overload:owner:2026-08-17')).toBeUndefined();
+    expect(
+      res.find((c) => c.fingerprint === 'overload:owner:2026-08-17'),
+    ).toBeUndefined();
   });
 
   it('daily cap respected using persisted dayKey counts', async () => {

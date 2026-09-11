@@ -1,0 +1,1 @@
+ALTER TABLE "User" ADD COLUMN "reengagementEnabled" BOOLEAN NOT NULL DEFAULT true;

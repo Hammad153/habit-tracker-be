@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional } from 'class-validator';
 import {
   COACH_FREQUENCY_VALUES,
   COACH_TONE_VALUES,
@@ -19,4 +19,8 @@ export class UpdateCoachPreferencesDto {
 
   @IsBoolean()
   weeklyReviewEnabled!: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  reengagementEnabled?: boolean;
 }

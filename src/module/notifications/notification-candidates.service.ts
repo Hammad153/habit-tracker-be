@@ -7,13 +7,18 @@ import {
   type NotificationPriority,
   type NotificationType,
 } from '../../core/utils/adaptive-cadence.constants';
-import {
-  evaluateCadence,
-} from '../../core/utils/adaptive-cadence.utils';
+import { evaluateCadence } from '../../core/utils/adaptive-cadence.utils';
 import { buildBehaviorReport } from '../../core/utils/behavior-analytics.utils';
 import { BEHAVIOR_WINDOWS } from '../../core/utils/behavior.constants';
-import { isScheduledOnDate, shiftDayKey } from '../../core/utils/schedule.utils';
-import { localDateKeyInZone, mondayOf, userWeekRangeFor } from '../../core/utils/week.utils';
+import {
+  isScheduledOnDate,
+  shiftDayKey,
+} from '../../core/utils/schedule.utils';
+import {
+  localDateKeyInZone,
+  mondayOf,
+  userWeekRangeFor,
+} from '../../core/utils/week.utils';
 import { HabitAnalyticsService } from '../analytics/habit-analytics.service';
 import { PortfolioOverloadService } from '../analytics/portfolio-overload.service';
 import { BehavioralEventService } from '../analytics/behavioral-event.service';
@@ -59,7 +64,10 @@ export class NotificationCandidatesService {
       -Math.max(...Object.values(COOLDOWN_DAYS)),
     );
     const recent = await this.databaseSvc.notificationDelivery.findMany({
-      where: { userId, createdAt: { gte: new Date(`${cooldownCutoff}T00:00:00.000Z`) } },
+      where: {
+        userId,
+        createdAt: { gte: new Date(`${cooldownCutoff}T00:00:00.000Z`) },
+      },
       select: { fingerprint: true, dayKey: true },
       take: 200,
     });
@@ -72,41 +80,44 @@ export class NotificationCandidatesService {
       todayKey,
       coachEnabled: prefs.coachEnabled,
       weeklyReviewEnabled: prefs.weeklyReviewEnabled,
+      reengagementEnabled: prefs.reengagementEnabled,
       coachFrequency: prefs.coachFrequency,
       recentlyDeliveredFingerprints,
       deliveriesToday,
     };
 
-    const candidates: Array<NotificationCandidate & { interventionPriority: number }> = [];
+    const candidates: Array<
+      NotificationCandidate & { interventionPriority: number }
+    > = [];
     const push = (
-        candidate: Omit<NotificationCandidate, 'priority' | 'expiresAt'>,
-        interventionPriority: number,
-        extra: Partial<
-          Pick<
-            Parameters<typeof evaluateCadence>[0],
-            'scheduledToday' | 'completedToday'
-          >
-        > = {},
-      ) => {
-        void localMinutes;
-        const decision = evaluateCadence({
-          ...baseCtx,
-          type: candidate.type,
-          interventionPriority,
-          fingerprint: candidate.fingerprint,
-          localMinutes: this.localMinutesFor(user?.timezone ?? null),
-          ...extra,
-        });
-        if (!decision.eligible) return;
-        candidates.push({
-          ...candidate,
-          priority: decision.priority,
-          expiresAt: new Date(
-            Date.now() + COOLDOWN_DAYS[candidate.type] * 86_400_000,
-          ).toISOString(),
-          interventionPriority,
-        });
-      };
+      candidate: Omit<NotificationCandidate, 'priority' | 'expiresAt'>,
+      interventionPriority: number,
+      extra: Partial<
+        Pick<
+          Parameters<typeof evaluateCadence>[0],
+          'scheduledToday' | 'completedToday'
+        >
+      > = {},
+    ) => {
+      void localMinutes;
+      const decision = evaluateCadence({
+        ...baseCtx,
+        type: candidate.type,
+        interventionPriority,
+        fingerprint: candidate.fingerprint,
+        localMinutes: this.localMinutesFor(user?.timezone ?? null),
+        ...extra,
+      });
+      if (!decision.eligible) return;
+      candidates.push({
+        ...candidate,
+        priority: decision.priority,
+        expiresAt: new Date(
+          Date.now() + COOLDOWN_DAYS[candidate.type] * 86_400_000,
+        ).toISOString(),
+        interventionPriority,
+      });
+    };
 
     // ---- Portfolio overload (Phase 3.6 engine reused verbatim) -------------
     try {
@@ -130,7 +141,10 @@ export class NotificationCandidatesService {
 
     // ---- Completed-week review availability --------------------------------
     if (prefs.weeklyReviewEnabled) {
-      const userWeek = userWeekRangeFor(user?.createdAt ?? new Date(), todayKey);
+      const userWeek = userWeekRangeFor(
+        user?.createdAt ?? new Date(),
+        todayKey,
+      );
       const weekComplete = todayKey > userWeek.range.end;
       if (weekComplete) {
         push(
@@ -208,8 +222,21 @@ export class NotificationCandidatesService {
             { scheduledToday, completedToday },
           );
 
+        if (scheduledToday && !completedToday && report.streaks.current >= 3) {
+          consider(
+            'REENGAGEMENT',
+            84,
+            `${habit.title} is still waiting for you`,
+            `You are on a ${report.streaks.current}-day streak. There is still time to keep it going.`,
+            `/habit-detail?habitId=${habit.id}`,
+          );
+        }
+
         // Map existing deterministic signals → typed notifications.
-        if (report.signals.includes('AT_RISK') || report.risk.level === 'HIGH') {
+        if (
+          report.signals.includes('AT_RISK') ||
+          report.risk.level === 'HIGH'
+        ) {
           consider(
             report.risk.level === 'CRITICAL'
               ? 'RECOVERY_NEEDED'
@@ -261,18 +288,19 @@ export class NotificationCandidatesService {
     }
 
     // ---- Pending adaptive proposal + evaluated outcome ----------------------
-    const pendingProposal = await this.databaseSvc.habitAdjustmentProposal.findFirst({
-      where: { userId, status: 'PENDING', confidence: { gte: 0.6 } },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        habitId: true,
-        type: true,
-        confidence: true,
-        reason: true,
-        createdAt: true,
-      },
-    });
+    const pendingProposal =
+      await this.databaseSvc.habitAdjustmentProposal.findFirst({
+        where: { userId, status: 'PENDING', confidence: { gte: 0.6 } },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          habitId: true,
+          type: true,
+          confidence: true,
+          reason: true,
+          createdAt: true,
+        },
+      });
     if (pendingProposal) {
       push(
         {
@@ -286,33 +314,38 @@ export class NotificationCandidatesService {
       );
     }
 
-    const evaluatedOutcome = await this.databaseSvc.habitAdjustmentProposal.findFirst({
-      where: {
-        userId,
-        status: 'ACCEPTED',
-        outcome: { in: ['IMPROVED', 'WORSENED'] },
-      },
-      orderBy: [{ resolvedAt: 'desc' }, { acceptedAt: 'desc' }],
-      select: {
-        id: true,
-        outcome: true,
-        habitId: true,
-        baselineCompletionRate: true,
-        postCompletionRate: true,
-        resolvedAt: true,
-      },
-    });
+    const evaluatedOutcome =
+      await this.databaseSvc.habitAdjustmentProposal.findFirst({
+        where: {
+          userId,
+          status: 'ACCEPTED',
+          outcome: { in: ['IMPROVED', 'WORSENED'] },
+        },
+        orderBy: [{ resolvedAt: 'desc' }, { acceptedAt: 'desc' }],
+        select: {
+          id: true,
+          outcome: true,
+          habitId: true,
+          baselineCompletionRate: true,
+          postCompletionRate: true,
+          resolvedAt: true,
+        },
+      });
     if (evaluatedOutcome) {
       const improved = evaluatedOutcome.outcome === 'IMPROVED';
       push(
         {
           type: 'ADAPTATION_OUTCOME',
           fingerprint: `adaptation-outcome:${evaluatedOutcome.id}:${evaluatedOutcome.outcome}`,
-          title: improved ? 'That adjustment worked' : 'The adjusted routine got harder',
+          title: improved
+            ? 'That adjustment worked'
+            : 'The adjusted routine got harder',
           body: improved
             ? 'Consistency improved after the adjustment.'
             : 'Consistency did not improve after the adjustment. Consider revisiting it.',
-          action: { route: `/habit-detail?habitId=${evaluatedOutcome.habitId}` },
+          action: {
+            route: `/habit-detail?habitId=${evaluatedOutcome.habitId}`,
+          },
         },
         80,
       );
@@ -379,9 +412,16 @@ export class NotificationCandidatesService {
         stored += 1;
         deliveries.push({ fingerprint: item.fingerprint, id: row.id });
         // Phase 4.1 — DELIVERED ledger event keyed to the authoritative row.
-        await this.behavioralEvents.recordDelivered(userId, row.id, item.fingerprint);
+        await this.behavioralEvents.recordDelivered(
+          userId,
+          row.id,
+          item.fingerprint,
+        );
       } catch (err) {
-        this.logger.warn({ outcome: 'delivery-record-failed', reason: String(err).slice(0, 40) });
+        this.logger.warn({
+          outcome: 'delivery-record-failed',
+          reason: String(err).slice(0, 40),
+        });
       }
     }
     return { stored, deliveries };
@@ -413,14 +453,18 @@ export class NotificationCandidatesService {
         aiCoachEnabled: true,
         coachFrequency: true,
         weeklyReviewEnabled: true,
+        reengagementEnabled: true,
       },
     });
-    return prefs ?? {
-      coachEnabled: true,
-      aiCoachEnabled: true,
-      coachFrequency: 'STANDARD',
-      weeklyReviewEnabled: true,
-    };
+    return (
+      prefs ?? {
+        coachEnabled: true,
+        aiCoachEnabled: true,
+        coachFrequency: 'STANDARD',
+        weeklyReviewEnabled: true,
+        reengagementEnabled: true,
+      }
+    );
   }
 }
 

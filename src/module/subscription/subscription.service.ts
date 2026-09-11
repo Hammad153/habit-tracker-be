@@ -47,6 +47,11 @@ export interface SubscriptionInfo {
   paymentMethodNeedsUpdate: boolean;
   nextBillingDate: string | null;
   entitlements: FeatureEntitlements;
+  accessSource: 'TRIAL' | 'PAID' | 'ADMIN_FREE_ACCESS' | 'ADMIN';
+  freeAccessEnabled: boolean;
+  freeAccessGrantedAt: string | null;
+  freeAccessExpiresAt: string | null;
+  freeAccessReason: string | null;
 }
 
 export interface SubscriptionResolution {
@@ -56,6 +61,8 @@ export interface SubscriptionResolution {
   entitlements: FeatureEntitlements;
   tier: BillingTier;
   plan: PaidPlanConfig | null;
+  accessSource: 'TRIAL' | 'PAID' | 'ADMIN_FREE_ACCESS' | 'ADMIN';
+  freeAccessEnabled: boolean;
 }
 
 const DAY_MS = 86_400_000;
@@ -162,6 +169,11 @@ export class SubscriptionService {
         resolution.status === SubscriptionStatus.PAST_DUE,
       nextBillingDate: row.currentPeriodEnd?.toISOString() ?? null,
       entitlements: resolution.entitlements,
+      accessSource: resolution.accessSource,
+      freeAccessEnabled: resolution.freeAccessEnabled,
+      freeAccessGrantedAt: row.freeAccessGrantedAt?.toISOString() ?? null,
+      freeAccessExpiresAt: row.freeAccessExpiresAt?.toISOString() ?? null,
+      freeAccessReason: row.freeAccessReason ?? null,
     };
   }
 
@@ -170,7 +182,9 @@ export class SubscriptionService {
    * expired trials / lapsed periods to EXPIRED (persisted). Used by the
    * SubscriptionAccessGuard as the authoritative access decision.
    */
-  async getEffectiveSubscription(userId: string): Promise<SubscriptionResolution> {
+  async getEffectiveSubscription(
+    userId: string,
+  ): Promise<SubscriptionResolution> {
     const row = await this.resolveRow(userId);
     const { status, needsPersist } = this.computeEffectiveStatus(row);
     const effectiveRow = needsPersist
@@ -186,25 +200,44 @@ export class SubscriptionService {
     });
 
     const isAdmin = user?.role === 'ADMIN';
+    const hasFreeAccess =
+      effectiveRow.freeAccessEnabled &&
+      (!effectiveRow.freeAccessExpiresAt ||
+        effectiveRow.freeAccessExpiresAt.getTime() > Date.now());
 
     // NO_ENTITLEMENTS for expired access is handled inside forSubscription
     // via the fallback branch; TRIALING/ACTIVE/etc. resolve normally.
     const entitlements = this.plans.forSubscription(
-      isAdmin ? SubscriptionStatus.ACTIVE : effectiveRow.status,
-      isAdmin ? 'PREMIUM_YEARLY' : effectiveRow.planId,
+      isAdmin || hasFreeAccess
+        ? SubscriptionStatus.ACTIVE
+        : effectiveRow.status,
+      isAdmin || hasFreeAccess ? 'PREMIUM_YEARLY' : effectiveRow.planId,
     );
 
     return {
       row: effectiveRow,
-      status: isAdmin ? SubscriptionStatus.ACTIVE : effectiveRow.status,
-      accessGranted: isAdmin ? true : this.isGrantedStatus(effectiveRow.status),
+      status:
+        isAdmin || hasFreeAccess
+          ? SubscriptionStatus.ACTIVE
+          : effectiveRow.status,
+      accessGranted:
+        isAdmin || hasFreeAccess || this.isGrantedStatus(effectiveRow.status),
       entitlements,
-      tier: isAdmin ? 'PREMIUM' : this.tierFor(effectiveRow),
-      plan: isAdmin
-        ? this.plans.getPaidPlan('PREMIUM_YEARLY')
-        : effectiveRow.planId
-        ? this.plans.getPaidPlan(effectiveRow.planId)
-        : null,
+      tier: isAdmin || hasFreeAccess ? 'PREMIUM' : this.tierFor(effectiveRow),
+      plan:
+        isAdmin || hasFreeAccess
+          ? this.plans.getPaidPlan('PREMIUM_YEARLY')
+          : effectiveRow.planId
+            ? this.plans.getPaidPlan(effectiveRow.planId)
+            : null,
+      accessSource: isAdmin
+        ? 'ADMIN'
+        : hasFreeAccess
+          ? 'ADMIN_FREE_ACCESS'
+          : effectiveRow.status === SubscriptionStatus.TRIALING
+            ? 'TRIAL'
+            : 'PAID',
+      freeAccessEnabled: hasFreeAccess,
     };
   }
 
@@ -226,7 +259,9 @@ export class SubscriptionService {
     trialStartedAt: Date = new Date(),
   ): Promise<void> {
     const durationDays = this.plans.getTrialDurationDays();
-    const trialEndsAt = new Date(trialStartedAt.getTime() + durationDays * DAY_MS);
+    const trialEndsAt = new Date(
+      trialStartedAt.getTime() + durationDays * DAY_MS,
+    );
     await this.databaseSvc.userSubscription.upsert({
       where: { userId },
       update: {},
@@ -311,7 +346,10 @@ export class SubscriptionService {
    */
   async verify(userId: string, reference: string): Promise<SubscriptionInfo> {
     if (!reference) {
-      throw new BadRequestException({ code: 'INVALID_REFERENCE', message: 'Missing payment reference' });
+      throw new BadRequestException({
+        code: 'INVALID_REFERENCE',
+        message: 'Missing payment reference',
+      });
     }
     const payment = await this.databaseSvc.paymentTransaction.findUnique({
       where: { reference },
@@ -459,7 +497,10 @@ export class SubscriptionService {
     const plan = this.plans.getPaidPlan(params.planId);
     if (!plan) {
       this.logger.warn(`activateSubscription: unknown plan ${params.planId}`);
-      throw new BadRequestException({ code: 'INVALID_PLAN', message: 'Unknown plan' });
+      throw new BadRequestException({
+        code: 'INVALID_PLAN',
+        message: 'Unknown plan',
+      });
     }
 
     const now = new Date();
@@ -467,7 +508,9 @@ export class SubscriptionService {
     // (e.g. plan codes changed). Trust the webhook/verified plan code first.
     let planId = params.planId;
     if (params.paystackPlanCode) {
-      const mapped = this.plans.findPlanIdByPaystackCode(params.paystackPlanCode);
+      const mapped = this.plans.findPlanIdByPaystackCode(
+        params.paystackPlanCode,
+      );
       if (mapped) planId = mapped;
     }
 
@@ -561,7 +604,10 @@ export class SubscriptionService {
           return { status: SubscriptionStatus.EXPIRED, needsPersist: true };
         }
         if (row.status === SubscriptionStatus.CANCELLED) {
-          return { status: SubscriptionStatus.NON_RENEWING, needsPersist: true };
+          return {
+            status: SubscriptionStatus.NON_RENEWING,
+            needsPersist: true,
+          };
         }
         return { status: row.status, needsPersist: false };
       case SubscriptionStatus.PAST_DUE:

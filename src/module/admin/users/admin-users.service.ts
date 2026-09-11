@@ -1,6 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { DatabaseService } from '../../../core/database/database.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { SubscriptionService } from '../../subscription/subscription.service';
 
 export class AdminUsersQueryDto {
   page?: number;
@@ -15,11 +20,18 @@ export class UpdateUserStatusDto {
   reason?: string;
 }
 
+export class UpdateUserSubscriptionAccessDto {
+  freeAccessEnabled!: boolean;
+  reason?: string;
+  expiresAt?: string;
+}
+
 @Injectable()
 export class AdminUsersService {
   constructor(
     private readonly db: DatabaseService,
     private readonly auditLogSvc: AuditLogService,
+    private readonly subscriptionSvc: SubscriptionService,
   ) {}
 
   async getUsers(query: AdminUsersQueryDto) {
@@ -70,6 +82,9 @@ export class AdminUsersService {
               status: true,
               planId: true,
               currentPeriodEnd: true,
+              freeAccessEnabled: true,
+              freeAccessExpiresAt: true,
+              freeAccessReason: true,
             },
           },
         },
@@ -219,7 +234,9 @@ export class AdminUsersService {
     ipAddress?: string,
   ) {
     if (adminId === userId && dto.isSuspended) {
-      throw new BadRequestException('You cannot suspend your own admin account');
+      throw new BadRequestException(
+        'You cannot suspend your own admin account',
+      );
     }
 
     const existing = await this.db.user.findUnique({
@@ -252,7 +269,9 @@ export class AdminUsersService {
       targetId: userId,
       details: {
         email: existing.email,
-        reason: dto.reason || (dto.isSuspended ? 'Suspended by admin' : 'Reactivated by admin'),
+        reason:
+          dto.reason ||
+          (dto.isSuspended ? 'Suspended by admin' : 'Reactivated by admin'),
         previousStatus: existing.isSuspended,
         newStatus: dto.isSuspended,
       },
@@ -260,5 +279,73 @@ export class AdminUsersService {
     });
 
     return updatedUser;
+  }
+
+  async setSubscriptionAccess(
+    adminId: string,
+    userId: string,
+    dto: UpdateUserSubscriptionAccessDto,
+    ipAddress?: string,
+  ) {
+    const target = await this.db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true },
+    });
+    if (!target)
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    if (dto.expiresAt && Number.isNaN(new Date(dto.expiresAt).getTime())) {
+      throw new BadRequestException('expiresAt must be a valid ISO date');
+    }
+
+    await this.subscriptionSvc.getEffectiveSubscription(userId);
+    const before = await this.db.userSubscription.findUnique({
+      where: { userId },
+    });
+    const enabled = Boolean(dto.freeAccessEnabled);
+    const updated = await this.db.userSubscription.update({
+      where: { userId },
+      data: enabled
+        ? {
+            freeAccessEnabled: true,
+            freeAccessGrantedBy: adminId,
+            freeAccessGrantedAt: new Date(),
+            freeAccessExpiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+            freeAccessRevokedAt: null,
+            freeAccessReason: dto.reason?.trim() || null,
+          }
+        : {
+            freeAccessEnabled: false,
+            freeAccessRevokedAt: new Date(),
+            freeAccessReason:
+              dto.reason?.trim() || before?.freeAccessReason || null,
+          },
+    });
+
+    await this.auditLogSvc.log({
+      adminId,
+      action: enabled ? 'USER_FREE_ACCESS_GRANTED' : 'USER_FREE_ACCESS_REVOKED',
+      targetType: 'USER',
+      targetId: userId,
+      ipAddress,
+      details: {
+        user: target.email,
+        reason: dto.reason?.trim() || null,
+        before: {
+          enabled: before?.freeAccessEnabled ?? false,
+          expiresAt: before?.freeAccessExpiresAt ?? null,
+        },
+        after: {
+          enabled: updated.freeAccessEnabled,
+          expiresAt: updated.freeAccessExpiresAt,
+        },
+      },
+    });
+
+    return {
+      userId,
+      freeAccessEnabled: updated.freeAccessEnabled,
+      freeAccessExpiresAt: updated.freeAccessExpiresAt,
+      freeAccessReason: updated.freeAccessReason,
+    };
   }
 }

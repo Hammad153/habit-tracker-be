@@ -34,6 +34,7 @@ export class ProfileService {
         coachTone: true,
         coachFrequency: true,
         weeklyReviewEnabled: true,
+        reengagementEnabled: true,
       },
     });
     return (
@@ -43,6 +44,7 @@ export class ProfileService {
         coachTone: 'BALANCED',
         coachFrequency: 'STANDARD',
         weeklyReviewEnabled: true,
+        reengagementEnabled: true,
       }
     );
   }
@@ -59,6 +61,9 @@ export class ProfileService {
         coachTone: dto.coachTone,
         coachFrequency: dto.coachFrequency,
         weeklyReviewEnabled: dto.weeklyReviewEnabled,
+        ...(dto.reengagementEnabled !== undefined
+          ? { reengagementEnabled: dto.reengagementEnabled }
+          : {}),
       },
     });
     return this.getCoachPreferences(userId);
@@ -132,8 +137,8 @@ export class ProfileService {
   }
 
   public async addExperience(userId: string, amount: number) {
-    return this.databaseSvc.$transaction((tx) =>
-      this.addExperienceTx(tx, userId, amount),
+    return this.databaseSvc.$transaction(
+      (tx) => this.addExperienceTx(tx, userId, amount),
       INTERACTIVE_TX_OPTIONS,
     );
   }

@@ -27,6 +27,7 @@ export interface CadenceInput {
   localMinutes: number;
   coachEnabled: boolean;
   weeklyReviewEnabled: boolean;
+  reengagementEnabled?: boolean;
   /** Phase 3.4 tier: MINIMAL | STANDARD | FREQUENT (unknown → STANDARD). */
   coachFrequency: string;
   /** For habit-scoped types: whether the habit expects action today. */
@@ -67,8 +68,7 @@ export const cooldownDaysFor = (type: NotificationType): number =>
 const frequencyFloor = (coachFrequency: string): number => {
   const normalized = String(coachFrequency ?? '').toUpperCase();
   return (
-    FREQUENCY_PRIORITY_FLOOR[normalized] ??
-    FREQUENCY_PRIORITY_FLOOR.STANDARD
+    FREQUENCY_PRIORITY_FLOOR[normalized] ?? FREQUENCY_PRIORITY_FLOOR.STANDARD
   );
 };
 
@@ -92,6 +92,9 @@ export const evaluateCadence = (input: CadenceInput): CadenceDecision => {
   }
   if (input.type === 'WEEKLY_REVIEW_READY' && !input.weeklyReviewEnabled) {
     return deny('weekly-review-disabled');
+  }
+  if (input.type === 'REENGAGEMENT' && input.reengagementEnabled === false) {
+    return deny('reengagement-disabled');
   }
 
   // ---- Habit-context gates (habit-scoped types only) ----------------------
@@ -123,8 +126,7 @@ export const evaluateCadence = (input: CadenceInput): CadenceDecision => {
   // Lifecycle notifications (weekly review / outcomes) are gated by their own
   // toggles + one-shot cooldowns, NOT by intervention-priority floors.
   const lifecycle =
-    input.type === 'WEEKLY_REVIEW_READY' ||
-    input.type === 'ADAPTATION_OUTCOME';
+    input.type === 'WEEKLY_REVIEW_READY' || input.type === 'ADAPTATION_OUTCOME';
   if (!lifecycle) {
     const minPriority = frequencyFloor(input.coachFrequency);
     if (input.interventionPriority < minPriority) {

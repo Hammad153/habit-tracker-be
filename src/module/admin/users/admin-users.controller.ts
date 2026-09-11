@@ -14,6 +14,7 @@ import {
   AdminUsersService,
   AdminUsersQueryDto,
   UpdateUserStatusDto,
+  UpdateUserSubscriptionAccessDto,
 } from './admin-users.service';
 
 @ApiTags('Admin User Management')
@@ -42,5 +43,19 @@ export class AdminUsersController {
     const adminId = req.user.sub;
     const ipAddress = req.ip || req.headers['x-forwarded-for'];
     return this.adminUsersSvc.setUserStatus(adminId, id, dto, ipAddress);
+  }
+
+  @Patch(':id/subscription-access')
+  setSubscriptionAccess(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateUserSubscriptionAccessDto,
+  ) {
+    return this.adminUsersSvc.setSubscriptionAccess(
+      req.user.sub,
+      id,
+      dto,
+      req.ip || req.headers['x-forwarded-for'],
+    );
   }
 }

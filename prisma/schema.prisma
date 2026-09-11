@@ -151,6 +151,7 @@ model User {
   coachTone                String                    @default("BALANCED") // ENCOURAGING|DIRECT|CALM|CHALLENGING|BALANCED
   coachFrequency           String                    @default("STANDARD") // MINIMAL|STANDARD|FREQUENT
   weeklyReviewEnabled      Boolean                   @default(true)
+  reengagementEnabled      Boolean                   @default(true)
   level                    Int                       @default(1)
   xp                       Int                       @default(0)
   // Cached virtual-currency balance. The RewardLedger is the source of truth;
@@ -762,6 +763,13 @@ model UserSubscription {
   // Payment-failure grace window (SUBSCRIPTION_GRACE_PERIOD_DAYS). Access is
   // retained during the grace period so the user can update their payment method.
   gracePeriodEndsAt         DateTime?
+  // Admin-granted access override resolved by SubscriptionService.
+  freeAccessEnabled         Boolean             @default(false)
+  freeAccessGrantedBy       String?
+  freeAccessGrantedAt       DateTime?
+  freeAccessExpiresAt       DateTime?
+  freeAccessRevokedAt       DateTime?
+  freeAccessReason          String?
   // Paystack identifiers. Payment credentials never touch this database.
   paystackCustomerCode      String?
   paystackSubscriptionCode  String?

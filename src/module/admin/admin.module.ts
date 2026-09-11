@@ -10,9 +10,10 @@ import { AdminShopService } from './shop/admin-shop.service';
 import { AdminShopController } from './shop/admin-shop.controller';
 import { AdminSystemService } from './system/admin-system.service';
 import { AdminSystemController } from './system/admin-system.controller';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, SubscriptionModule],
   controllers: [
     AuditLogController,
     AdminUsersController,

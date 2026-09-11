@@ -187,9 +187,11 @@ describe('SubscriptionService (Phase 3.9)', () => {
         trialEndsAt: new Date(Date.now() - DAY_MS),
       });
       db.userSubscription.findUnique.mockResolvedValue(expiredTrial);
-      db.userSubscription.update.mockImplementation(
-        ({ data }: any) => ({ ...makeRow(), ...expiredTrial, ...data }),
-      );
+      db.userSubscription.update.mockImplementation(({ data }: any) => ({
+        ...makeRow(),
+        ...expiredTrial,
+        ...data,
+      }));
 
       const resolution = await svc.getEffectiveSubscription('user-1');
       expect(db.userSubscription.update).toHaveBeenCalledWith(
@@ -213,6 +215,43 @@ describe('SubscriptionService (Phase 3.9)', () => {
       const info = await svc.getInfo('user-1');
       expect(info.accessGranted).toBe(false);
       expect(info.status).toBe(SubscriptionStatus.EXPIRED);
+    });
+
+    it('grants Premium access when an admin free-access override is enabled', async () => {
+      const { svc, db } = makeSvc();
+      db.userSubscription.findUnique.mockResolvedValue(
+        makeRow({
+          status: SubscriptionStatus.EXPIRED,
+          freeAccessEnabled: true,
+          freeAccessGrantedBy: 'admin-1',
+          freeAccessGrantedAt: new Date(),
+          freeAccessExpiresAt: null,
+          freeAccessReason: 'Beta tester',
+        }),
+      );
+      db.user.findUnique.mockResolvedValue({ role: 'USER' });
+
+      const info = await svc.getInfo('user-1');
+      expect(info.accessGranted).toBe(true);
+      expect(info.tier).toBe('PREMIUM');
+      expect(info.accessSource).toBe('ADMIN_FREE_ACCESS');
+      expect(info.freeAccessReason).toBe('Beta tester');
+    });
+
+    it('does not grant access after an admin override expires', async () => {
+      const { svc, db } = makeSvc();
+      db.userSubscription.findUnique.mockResolvedValue(
+        makeRow({
+          status: SubscriptionStatus.EXPIRED,
+          freeAccessEnabled: true,
+          freeAccessExpiresAt: new Date(Date.now() - DAY_MS),
+        }),
+      );
+      db.user.findUnique.mockResolvedValue({ role: 'USER' });
+
+      const info = await svc.getInfo('user-1');
+      expect(info.accessGranted).toBe(false);
+      expect(info.accessSource).toBe('PAID');
     });
   });
 
@@ -250,9 +289,9 @@ describe('SubscriptionService (Phase 3.9)', () => {
       });
       plans.getPaystackPlanCode.mockReturnValue(null);
       paystackSvc.isConfigured.mockReturnValue(false);
-      await expect(svc.checkout('user-1', PlanId.BASIC_MONTHLY)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        svc.checkout('user-1', PlanId.BASIC_MONTHLY),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('refuses when no Paystack plan code is mapped in env', async () => {
@@ -264,9 +303,9 @@ describe('SubscriptionService (Phase 3.9)', () => {
         currency: 'NGN',
       });
       plans.getPaystackPlanCode.mockReturnValue(null);
-      await expect(svc.checkout('user-1', PlanId.BASIC_MONTHLY)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        svc.checkout('user-1', PlanId.BASIC_MONTHLY),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('checkout initializes a plan-backed transaction and records it PENDING', async () => {
@@ -285,9 +324,10 @@ describe('SubscriptionService (Phase 3.9)', () => {
         reference: 'routina_anything',
       });
       db.user.findUnique.mockResolvedValue({ id: 'user-1', email: 'a@b.com' });
-      db.paymentTransaction.create.mockImplementation(
-        ({ data }: any) => ({ id: 'tx-1', ...data }),
-      );
+      db.paymentTransaction.create.mockImplementation(({ data }: any) => ({
+        id: 'tx-1',
+        ...data,
+      }));
 
       const res = await svc.checkout('user-1', PlanId.BASIC_MONTHLY);
       expect(res.reference).toMatch(/^routina_[0-9a-f]{18}$/);
@@ -338,7 +378,10 @@ describe('SubscriptionService (Phase 3.9)', () => {
         paystackPlanCodeEnv: 'PAYSTACK_BASIC_MONTHLY_PLAN_CODE',
       });
       db.userSubscription.upsert.mockResolvedValue(
-        makeRow({ planId: PlanId.BASIC_MONTHLY, status: SubscriptionStatus.ACTIVE }),
+        makeRow({
+          planId: PlanId.BASIC_MONTHLY,
+          status: SubscriptionStatus.ACTIVE,
+        }),
       );
       // getInfo() re-reads the (now activated) subscription row.
       db.userSubscription.findUnique.mockResolvedValue(
@@ -381,9 +424,9 @@ describe('SubscriptionService (Phase 3.9)', () => {
         planId: PlanId.BASIC_MONTHLY,
         status: PaymentStatus.PENDING,
       });
-      await expect(
-        svc.verify('user-1', 'routina_abc'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(svc.verify('user-1', 'routina_abc')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('verify marks transaction failed when Paystack says so', async () => {
@@ -396,7 +439,9 @@ describe('SubscriptionService (Phase 3.9)', () => {
         amountNaira: 1500,
         status: PaymentStatus.PENDING,
       });
-      paystackSvc.verifyTransaction.mockResolvedValue({ success: false } as any);
+      paystackSvc.verifyTransaction.mockResolvedValue({
+        success: false,
+      } as any);
       await expect(svc.verify('user-1', 'routina_abc')).rejects.toThrow(
         BadRequestException,
       );
@@ -491,9 +536,10 @@ describe('SubscriptionService (Phase 3.9)', () => {
           gracePeriodEndsAt: new Date(Date.now() - DAY_MS),
         }),
       );
-      db.userSubscription.update.mockImplementation(
-        ({ data }: any) => ({ ...makeRow(), ...data }),
-      );
+      db.userSubscription.update.mockImplementation(({ data }: any) => ({
+        ...makeRow(),
+        ...data,
+      }));
       const resolution = await svc.getEffectiveSubscription('user-1');
       expect(resolution.status).toBe(SubscriptionStatus.EXPIRED);
       expect(resolution.accessGranted).toBe(false);
@@ -521,9 +567,10 @@ describe('SubscriptionService (Phase 3.9)', () => {
           currentPeriodEnd: new Date(Date.now() - DAY_MS),
         }),
       );
-      db.userSubscription.update.mockImplementation(
-        ({ data }: any) => ({ ...makeRow(), ...data }),
-      );
+      db.userSubscription.update.mockImplementation(({ data }: any) => ({
+        ...makeRow(),
+        ...data,
+      }));
       expect(await svc.getEffectiveSubscription('user-1')).toMatchObject({
         status: SubscriptionStatus.EXPIRED,
         accessGranted: false,
