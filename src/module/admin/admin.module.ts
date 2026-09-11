@@ -11,6 +11,8 @@ import { AdminShopController } from './shop/admin-shop.controller';
 import { AdminSystemService } from './system/admin-system.service';
 import { AdminSystemController } from './system/admin-system.controller';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { AdminNotificationsController } from './notifications/admin-notifications.controller';
+import { AdminNotificationsService } from './notifications/admin-notifications.service';
 
 @Module({
   imports: [DatabaseModule, SubscriptionModule],
@@ -20,6 +22,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     AdminHabitsController,
     AdminShopController,
     AdminSystemController,
+    AdminNotificationsController,
   ],
   providers: [
     AuditLogService,
@@ -27,6 +30,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     AdminHabitsService,
     AdminShopService,
     AdminSystemService,
+    AdminNotificationsService,
   ],
   exports: [
     AuditLogService,
@@ -34,6 +38,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     AdminHabitsService,
     AdminShopService,
     AdminSystemService,
+    AdminNotificationsService,
   ],
 })
 export class AdminModule {}

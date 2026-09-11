@@ -1,6 +1,7 @@
 import * as Joi from 'joi';
 
 export const configValidationSchema = Joi.object({
+  CRON_SECRET: Joi.string().optional().allow(''),
   DATABASE_URL: Joi.string().required(),
 
   // Secrets must be strong and explicitly provided — no insecure fallbacks.

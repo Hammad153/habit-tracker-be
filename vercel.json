@@ -20,5 +20,11 @@
       "dest": "api/index.ts",
       "methods": ["GET", "POST", "PUT", "PATCH", "HEAD", "DELETE", "OPTIONS"]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/v1/notifications/reengagement/dispatch",
+      "schedule": "0 * * * *"
+    }
   ]
 }

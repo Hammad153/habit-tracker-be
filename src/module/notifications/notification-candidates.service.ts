@@ -427,6 +427,50 @@ export class NotificationCandidatesService {
     return { stored, deliveries };
   }
 
+  /** Server-side hourly dispatch for users who have opted into re-engagement. */
+  public async dispatchReengagement(): Promise<{ attempted: number; sent: number }> {
+    const users = await this.databaseSvc.user.findMany({
+      where: { pushToken: { not: null }, reengagementEnabled: true, isSuspended: false },
+      select: { id: true, pushToken: true },
+      take: 500,
+    });
+    let attempted = 0;
+    let sent = 0;
+
+    for (const user of users) {
+      const candidates = (await this.getCandidates(user.id)).filter(
+        (candidate) => candidate.type === 'REENGAGEMENT',
+      );
+      for (const candidate of candidates) {
+        attempted += 1;
+        try {
+          const response = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: user.pushToken,
+              title: candidate.title,
+              body: candidate.body,
+              data: { route: candidate.action.route, type: candidate.type },
+            }),
+          });
+          if (!response.ok) continue;
+          await this.markDelivered(user.id, [
+            {
+              fingerprint: candidate.fingerprint,
+              type: candidate.type,
+              priority: candidate.priority,
+            },
+          ]);
+          sent += 1;
+        } catch (error) {
+          this.logger.warn(`Re-engagement delivery failed: ${String(error).slice(0, 120)}`);
+        }
+      }
+    }
+    return { attempted, sent };
+  }
+
   // -------------------------------------------------------------------------
 
   private localMinutesFor(timezone: string | null): number {
