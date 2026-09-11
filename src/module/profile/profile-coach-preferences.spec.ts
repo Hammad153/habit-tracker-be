@@ -34,6 +34,7 @@ describe('ProfileService — coach preferences (Phase 3.4)', () => {
       coachTone: 'BALANCED',
       coachFrequency: 'STANDARD',
       weeklyReviewEnabled: true,
+      reengagementEnabled: true,
     });
   });
 
@@ -73,7 +74,13 @@ describe('ProfileService — coach preferences (Phase 3.4)', () => {
   });
 
   it('DTO validation accepts every documented tone and frequency', () => {
-    for (const tone of ['ENCOURAGING', 'DIRECT', 'CALM', 'CHALLENGING', 'BALANCED']) {
+    for (const tone of [
+      'ENCOURAGING',
+      'DIRECT',
+      'CALM',
+      'CHALLENGING',
+      'BALANCED',
+    ]) {
       for (const frequency of ['MINIMAL', 'STANDARD', 'FREQUENT']) {
         const dto = plainToInstance(UpdateCoachPreferencesDto, {
           ...VALID,
@@ -94,7 +101,9 @@ describe('ProfileService — coach preferences (Phase 3.4)', () => {
       userId: 'someone-else',
     });
     validateSync(dto, { whitelist: true });
-    expect('userId' in dto ? (dto as { userId?: string }).userId : undefined).toBeUndefined();
+    expect(
+      'userId' in dto ? (dto as { userId?: string }).userId : undefined,
+    ).toBeUndefined();
     await svc.updateCoachPreferences('victim-id', dto);
     expect(db.user.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'victim-id' } }),

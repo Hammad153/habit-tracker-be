@@ -2,12 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AdminUsersService } from './admin-users.service';
 import { DatabaseService } from '../../../core/database/database.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { SubscriptionService } from '../../subscription/subscription.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 describe('AdminUsersService', () => {
   let service: AdminUsersService;
   let db: any;
   let auditLogSvc: any;
+  let subscriptionSvc: any;
 
   beforeEach(async () => {
     db = {
@@ -65,11 +67,16 @@ describe('AdminUsersService', () => {
       log: jest.fn().mockResolvedValue({}),
     };
 
+    subscriptionSvc = {
+      getEffectiveSubscription: jest.fn().mockResolvedValue({}),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdminUsersService,
         { provide: DatabaseService, useValue: db },
         { provide: AuditLogService, useValue: auditLogSvc },
+        { provide: SubscriptionService, useValue: subscriptionSvc },
       ],
     }).compile();
 
@@ -89,7 +96,9 @@ describe('AdminUsersService', () => {
   });
 
   it('should throw NotFoundException if user 360 does not exist', async () => {
-    await expect(service.getUser360('non_existent')).rejects.toThrow(NotFoundException);
+    await expect(service.getUser360('non_existent')).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('should throw BadRequestException if admin tries to suspend self', async () => {
@@ -99,7 +108,10 @@ describe('AdminUsersService', () => {
   });
 
   it('should suspend user and log audit event', async () => {
-    const res = await service.setUserStatus('admin1', 'u1', { isSuspended: true, reason: 'Spam' });
+    const res = await service.setUserStatus('admin1', 'u1', {
+      isSuspended: true,
+      reason: 'Spam',
+    });
     expect(db.user.update).toHaveBeenCalledWith({
       where: { id: 'u1' },
       data: { isSuspended: true },
