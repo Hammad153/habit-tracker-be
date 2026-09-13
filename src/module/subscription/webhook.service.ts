@@ -473,8 +473,8 @@ export class SubscriptionWebhookService {
     // to the interval tier — recovery is handled by findPlanIdByPaystackCode
     // once plan codes are configured.
     const tier =
-      Number(data.plan?.amount_in_kobo) >= 300000 ||
-      Number(data.amount) >= 300000
+      Number(data.plan?.amount_in_kobo) >= 400000 ||
+      Number(data.amount) >= 400000
         ? 'PREMIUM'
         : 'BASIC';
     if (!interval) return null;

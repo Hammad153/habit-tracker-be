@@ -17,7 +17,7 @@ const chargeSuccessPayload = (reference = 'routina_0001') => ({
   event: 'charge.success',
   data: {
     reference,
-    amount: 150000, // ₦1,500 in kobo
+    amount: 300000, // ₦3,000 in kobo
     status: 'success',
     paid_at: '2026-09-10T12:00:00.000Z',
     channel: 'card',
@@ -78,7 +78,7 @@ const row = (overrides: Record<string, any> = {}) => ({
   planId: 'BASIC_MONTHLY',
   status: SubscriptionStatus.ACTIVE,
   billingInterval: BillingInterval.MONTHLY,
-  amountNaira: 1500,
+  amountNaira: 3000,
   currency: 'NGN',
   trialStartedAt: null,
   trialEndsAt: null,
@@ -131,7 +131,7 @@ describe('SubscriptionWebhookService (Phase 3.9)', () => {
         reference: 'routina_0001',
         planId: 'BASIC_MONTHLY',
         billingInterval: BillingInterval.MONTHLY,
-        amountNaira: 1500,
+        amountNaira: 3000,
         status: PaymentStatus.PENDING,
         channel: null,
       });
@@ -332,7 +332,7 @@ describe('SubscriptionWebhookService (Phase 3.9)', () => {
       );
       const upsertCall = db.userSubscription.upsert.mock.calls[0][0];
       expect(upsertCall.update).toMatchObject({
-        amountNaira: 1500,
+        amountNaira: 3000,
         billingInterval: BillingInterval.MONTHLY,
         paystackCustomerCode: 'CUS_1',
         paystackAuthorizationCode: 'AUTH_1',

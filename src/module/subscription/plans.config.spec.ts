@@ -32,9 +32,9 @@ describe('PlanRegistry (Phase 3.9 pricing/entitlements)', () => {
   it('marks Basic Monthly as most popular and computes annual savings', () => {
     const basicMonthly = PAID_PLANS.find((p) => p.id === PlanId.BASIC_MONTHLY);
     expect(basicMonthly?.mostPopular).toBe(true);
-    // ₦1,500 × 12 = ₦18,000 → yearly price ₦15,000 = ₦3,000 saved.
-    expect(PAID_PLANS.find((p) => p.id === PlanId.BASIC_YEARLY)?.annualSavings).toBe(3000);
-    expect(PAID_PLANS.find((p) => p.id === PlanId.PREMIUM_YEARLY)?.annualSavings).toBe(6000);
+    // ₦3,000 × 12 = ₦36,000 → yearly price ₦30,000 = ₦6,000 saved.
+    expect(PAID_PLANS.find((p) => p.id === PlanId.BASIC_YEARLY)?.annualSavings).toBe(6000);
+    expect(PAID_PLANS.find((p) => p.id === PlanId.PREMIUM_YEARLY)?.annualSavings).toBe(0);
   });
 
   it('getTrialDurationDays defaults to 7 and honors TRIAL_DURATION_DAYS', () => {

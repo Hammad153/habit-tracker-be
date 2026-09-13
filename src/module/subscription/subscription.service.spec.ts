@@ -262,7 +262,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
         planId: PlanId.BASIC_MONTHLY,
         status: SubscriptionStatus.ACTIVE,
         billingInterval: BillingInterval.MONTHLY,
-        amountNaira: 1500,
+        amountNaira: 3000,
         currency: 'NGN',
       });
       db.userSubscription.findUnique.mockResolvedValue(basic);
@@ -283,7 +283,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
       const { svc, plans, paystackSvc } = makeSvc();
       plans.requirePaidPlan.mockReturnValue({
         id: PlanId.BASIC_MONTHLY,
-        amount: 1500,
+        amount: 3000,
         billingInterval: BillingInterval.MONTHLY,
         currency: 'NGN',
       });
@@ -298,7 +298,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
       const { svc, plans } = makeSvc();
       plans.requirePaidPlan.mockReturnValue({
         id: PlanId.BASIC_MONTHLY,
-        amount: 1500,
+        amount: 3000,
         billingInterval: BillingInterval.MONTHLY,
         currency: 'NGN',
       });
@@ -313,7 +313,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
       const now = Date.now();
       plans.requirePaidPlan.mockReturnValue({
         id: PlanId.BASIC_MONTHLY,
-        amount: 1500,
+        amount: 3000,
         billingInterval: BillingInterval.MONTHLY,
         currency: 'NGN',
       });
@@ -334,7 +334,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
       expect(paystackSvc.initializeTransaction).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'a@b.com',
-          amountMinor: 1500 * 100, // NGN → kobo
+          amountMinor: 3000 * 100, // NGN → kobo
           planCode: 'PLN_basic_monthly',
         }),
       );
@@ -343,7 +343,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
         userId: 'user-1',
         planId: PlanId.BASIC_MONTHLY,
         billingInterval: BillingInterval.MONTHLY,
-        amountNaira: 1500,
+        amountNaira: 3000,
         currency: 'NGN',
         status: PaymentStatus.PENDING,
       });
@@ -357,7 +357,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
         reference: 'routina_abc',
         planId: PlanId.BASIC_MONTHLY,
         billingInterval: BillingInterval.MONTHLY,
-        amountNaira: 1500,
+        amountNaira: 3000,
         status: PaymentStatus.PENDING,
       };
       db.paymentTransaction.findUnique.mockResolvedValue(payment);
@@ -372,7 +372,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
       plans.findPlanIdByPaystackCode.mockReturnValue(null);
       plans.getPaidPlan.mockReturnValue({
         id: PlanId.BASIC_MONTHLY,
-        amount: 1500,
+        amount: 3000,
         billingInterval: BillingInterval.MONTHLY,
         currency: 'NGN',
         paystackPlanCodeEnv: 'PAYSTACK_BASIC_MONTHLY_PLAN_CODE',
@@ -389,7 +389,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
           planId: PlanId.BASIC_MONTHLY,
           status: SubscriptionStatus.ACTIVE,
           billingInterval: BillingInterval.MONTHLY,
-          amountNaira: 1500,
+          amountNaira: 3000,
           currentPeriodStart: new Date(),
           currentPeriodEnd: new Date(Date.now() + 30 * DAY_MS),
         }),
@@ -436,7 +436,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
         reference: 'routina_abc',
         planId: PlanId.BASIC_MONTHLY,
         billingInterval: BillingInterval.MONTHLY,
-        amountNaira: 1500,
+        amountNaira: 3000,
         status: PaymentStatus.PENDING,
       });
       paystackSvc.verifyTransaction.mockResolvedValue({

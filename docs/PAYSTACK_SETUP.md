@@ -9,10 +9,10 @@ custom recurring-billing engine, and pricing lives centrally in
 
 | Plan id           | Price                     | Paystack amount (kobo) |
 | ----------------- | ------------------------- | ---------------------- |
-| `BASIC_MONTHLY`   | ₦1,500/mo                 | 150000                 |
-| `BASIC_YEARLY`    | ₦15,000/yr (saves ₦3,000) | 1500000                |
-| `PREMIUM_MONTHLY` | ₦3,000/mo                 | 300000                 |
-| `PREMIUM_YEARLY`  | ₦30,000/yr (saves ₦6,000) | 3000000                |
+| `BASIC_MONTHLY`   | ₦3,000/mo                 | 300000                 |
+| `BASIC_YEARLY`    | ₦30,000/yr (saves ₦6,000) | 3000000                |
+| `PREMIUM_MONTHLY` | ₦5,000/mo                 | 500000                 |
+| `PREMIUM_YEARLY`  | ₦60,000/yr                | 6000000                |
 
 > **Trial:** every account gets one 7-day trial at signup (`TRIAL_DURATION_DAYS`).
 > When it expires the account moves to `EXPIRED` and the paywall blocks usage.
