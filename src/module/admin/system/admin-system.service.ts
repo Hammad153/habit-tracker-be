@@ -7,7 +7,7 @@ export class AdminSystemService {
 
   getSystemConfig() {
     return {
-      appName: this.configSvc.get<string>('APP_NAME') || 'Routina',
+      appName: this.configSvc.get<string>('APP_NAME') || 'Ember',
       environment: process.env.NODE_ENV || 'development',
       privacyFloor: 5,
       rewardEngineDefaults: {

@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../../core/database/database.service';
 import {
@@ -71,9 +67,11 @@ export class SubscriptionWebhookService {
     const event = payload.event;
     const dedupeKey = `${event}:${this.dedupeReference(payload.data)}`;
 
-    const existing = await this.databaseSvc.subscriptionWebhookEvent.findUnique({
-      where: { dedupeKey },
-    });
+    const existing = await this.databaseSvc.subscriptionWebhookEvent.findUnique(
+      {
+        where: { dedupeKey },
+      },
+    );
     if (existing) {
       return { event, status: 'duplicate' };
     }
@@ -146,7 +144,7 @@ export class SubscriptionWebhookService {
     }
     if (!resolvedUserId) {
       this.logger.warn(
-        `charge.success for ${reference}: no Routina user matched; ignored.`,
+        `charge.success for ${reference}: no Ember user matched; ignored.`,
       );
       return;
     }
@@ -206,7 +204,8 @@ export class SubscriptionWebhookService {
         data.subscription_code ?? existing.paystackSubscriptionCode,
       paystackCustomerCode:
         data.customer?.customer_code ?? existing.paystackCustomerCode,
-      cancelAtPeriodEnd: data.cancel_at_period_end ?? existing.cancelAtPeriodEnd,
+      cancelAtPeriodEnd:
+        data.cancel_at_period_end ?? existing.cancelAtPeriodEnd,
     };
 
     const planCode = this.planCodeFromData(data);
@@ -355,7 +354,11 @@ export class SubscriptionWebhookService {
       const mapped = params.paystackPlanCode
         ? this.plans.findPlanIdByPaystackCode(params.paystackPlanCode)
         : null;
-      planId = mapped ?? (params.interval === BillingInterval.YEARLY ? 'BASIC_YEARLY' : 'BASIC_MONTHLY');
+      planId =
+        mapped ??
+        (params.interval === BillingInterval.YEARLY
+          ? 'BASIC_YEARLY'
+          : 'BASIC_MONTHLY');
     }
 
     const now = new Date();
@@ -403,7 +406,9 @@ export class SubscriptionWebhookService {
   }
 
   private async findUserId(data: Record<string, any>): Promise<string | null> {
-    const byCustomer = await this.userIdByCustomerCode(data.customer?.customer_code);
+    const byCustomer = await this.userIdByCustomerCode(
+      data.customer?.customer_code,
+    );
     if (byCustomer) return byCustomer;
     const email: string | undefined = data.customer?.email;
     if (!email) return null;
@@ -424,22 +429,19 @@ export class SubscriptionWebhookService {
     customerCode: string | undefined,
   ): Promise<string | null> {
     if (!customerCode) return null;
-    const subscriptionRow =
-      await this.databaseSvc.userSubscription.findFirst({
-        where: { paystackCustomerCode: customerCode },
-        select: { userId: true },
-      });
+    const subscriptionRow = await this.databaseSvc.userSubscription.findFirst({
+      where: { paystackCustomerCode: customerCode },
+      select: { userId: true },
+    });
     return subscriptionRow?.userId ?? null;
   }
 
   private dedupeReference(data: Record<string, any>): string {
-    return (
-      data.reference ||
+    return (data.reference ||
       data.subscription_code ||
       data.invoice_code ||
       data.id ||
-      'unknown'
-    ) as string;
+      'unknown') as string;
   }
 
   private intervalFromData(data: Record<string, any>): BillingInterval | null {
@@ -471,7 +473,8 @@ export class SubscriptionWebhookService {
     // to the interval tier — recovery is handled by findPlanIdByPaystackCode
     // once plan codes are configured.
     const tier =
-      Number(data.plan?.amount_in_kobo) >= 300000 || Number(data.amount) >= 300000
+      Number(data.plan?.amount_in_kobo) >= 300000 ||
+      Number(data.amount) >= 300000
         ? 'PREMIUM'
         : 'BASIC';
     if (!interval) return null;

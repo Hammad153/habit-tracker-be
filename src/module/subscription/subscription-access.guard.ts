@@ -58,15 +58,14 @@ export class SubscriptionAccessGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    const resolution = await this.subscriptionSvc.getEffectiveSubscription(
-      userId,
-    );
+    const resolution =
+      await this.subscriptionSvc.getEffectiveSubscription(userId);
 
     if (!bypass && !resolution.accessGranted) {
       throw new ForbiddenException({
         code: 'SUBSCRIPTION_REQUIRED',
         message:
-          'Your free trial has ended. Choose a plan to continue using Routina.',
+          'Your free trial has ended. Choose a plan to continue using Ember.',
       });
     }
 
@@ -84,6 +83,8 @@ export class SubscriptionAccessGuard implements CanActivate {
   }
 
   private devBypassEnabled(): boolean {
-    return String(this.configSvc.get<string>('SUBSCRIPTION_DEV_BYPASS')) === 'true';
+    return (
+      String(this.configSvc.get<string>('SUBSCRIPTION_DEV_BYPASS')) === 'true'
+    );
   }
 }

@@ -172,18 +172,11 @@ export class ExportService {
           ? v
           : v === null || v === undefined
             ? ''
-            : JSON.stringify(v) ?? '';
+            : (JSON.stringify(v) ?? '');
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
 
-    const header = [
-      'Habit',
-      'Category',
-      'Date',
-      'Completed',
-      'Value',
-      'Unit',
-    ];
+    const header = ['Habit', 'Category', 'Date', 'Completed', 'Value', 'Unit'];
     const rows: string[][] = [];
     for (const h of user.habits) {
       if (h.completions.length === 0) {
@@ -211,7 +204,7 @@ export class ExportService {
   public async getExcel(userId: string): Promise<Buffer> {
     const user = await this.loadUserWithData(userId);
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Routina';
+    workbook.creator = 'Ember';
     workbook.created = new Date();
 
     // ── Profile sheet ──
@@ -515,7 +508,7 @@ export class ExportService {
 </head>
 <body>
 <div class="header">
-  <h1>Routina Report</h1>
+  <h1>Ember Report</h1>
   <p>${this.escHtml(user.name)} &middot; ${this.escHtml(user.email)} &middot; Generated ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
 </div>
 
@@ -560,7 +553,7 @@ export class ExportService {
 </table>
 
 <div class="footer">
-  Routina &mdash; Your data, your journey. Export generated on ${this.fmtDateTime(new Date())}
+  Ember &mdash; Your data, your journey. Export generated on ${this.fmtDateTime(new Date())}
 </div>
 </body>
 </html>`;

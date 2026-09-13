@@ -16,10 +16,10 @@ const bootstrap = async () => {
   configureApp(app);
 
   const config = new DocumentBuilder()
-    .setTitle('Routina')
+    .setTitle('Ember')
     .setDescription('Behavioral change system API')
     .setVersion('1.0')
-    .addTag('Routina')
+    .addTag('Ember')
     .addBearerAuth()
     .build();
 

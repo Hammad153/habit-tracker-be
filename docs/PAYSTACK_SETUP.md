@@ -1,18 +1,18 @@
 # Paystack Setup & Subscription Operations (Phase 3.9)
 
-Routina sells 4 recurring plans through Paystack (NGN). All recurring billing is
+Ember sells 4 recurring plans through Paystack (NGN). All recurring billing is
 **Paystack-native** — we initialize a Plan-backed transaction, Paystack creates
 the customer subscription, and its webhooks drive our state. We never build a
 custom recurring-billing engine, and pricing lives centrally in
 `src/module/subscription/plans.config.ts` (exposed to clients via
 `GET /subscription/plans`).
 
-| Plan id | Price | Paystack amount (kobo) |
-|---|---|---|
-| `BASIC_MONTHLY` | ₦1,500/mo | 150000 |
-| `BASIC_YEARLY` | ₦15,000/yr (saves ₦3,000) | 1500000 |
-| `PREMIUM_MONTHLY` | ₦3,000/mo | 300000 |
-| `PREMIUM_YEARLY` | ₦30,000/yr (saves ₦6,000) | 3000000 |
+| Plan id           | Price                     | Paystack amount (kobo) |
+| ----------------- | ------------------------- | ---------------------- |
+| `BASIC_MONTHLY`   | ₦1,500/mo                 | 150000                 |
+| `BASIC_YEARLY`    | ₦15,000/yr (saves ₦3,000) | 1500000                |
+| `PREMIUM_MONTHLY` | ₦3,000/mo                 | 300000                 |
+| `PREMIUM_YEARLY`  | ₦30,000/yr (saves ₦6,000) | 3000000                |
 
 > **Trial:** every account gets one 7-day trial at signup (`TRIAL_DURATION_DAYS`).
 > When it expires the account moves to `EXPIRED` and the paywall blocks usage.
@@ -39,7 +39,7 @@ reaches the mobile app or marketing site.
 
 For each plan click **"Create Plan"**:
 
-1. **Name:** `Routina Basic Monthly` … and so on for all four.
+1. **Name:** `Ember Basic Monthly` … and so on for all four.
 2. **Amount:** the kobo value from the table above (Paystack displays it as ₦).
 3. **Interval:** `Monthly` for the monthly plans, `Annual` for the yearly plans.
 4. **Currency:** NGN (your account default).

@@ -36,7 +36,9 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
     if (user.isSuspended) {
-      throw new UnauthorizedException('Your account has been suspended. Please contact support.');
+      throw new UnauthorizedException(
+        'Your account has been suspended. Please contact support.',
+      );
     }
 
     const isMatch = await bcrypt.compare(pass, user.password);
@@ -53,7 +55,9 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
     if (user.role !== 'ADMIN') {
-      throw new UnauthorizedException('Access denied. Admin privileges required.');
+      throw new UnauthorizedException(
+        'Access denied. Admin privileges required.',
+      );
     }
 
     if (user.isSuspended) {
@@ -144,7 +148,7 @@ export class AuthService {
 
     await this.userSvc.updateResetToken(user.id, tokenDigest, resetTokenExpiry);
 
-    const appName = this.configSvc.get<string>('APP_NAME') || 'Routina';
+    const appName = this.configSvc.get<string>('APP_NAME') || 'Ember';
     const appScheme =
       this.configSvc.get<string>('APP_DEEP_LINK_SCHEME') || 'habittracker';
     const resetUrl = `${appScheme}://reset-password?token=${resetToken}`;

@@ -8,7 +8,7 @@ export class CheckoutDto {
   @ApiProperty({
     enum: SUBSCRIBABLE_PLAN_IDS,
     example: 'BASIC_MONTHLY',
-    description: 'Routina plan id to subscribe to',
+    description: 'Ember plan id to subscribe to',
   })
   @IsString()
   @IsIn(SUBSCRIBABLE_PLAN_IDS as string[])

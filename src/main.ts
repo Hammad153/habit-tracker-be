@@ -11,7 +11,7 @@ async function bootstrap() {
   configureApp(app);
 
   const config = new DocumentBuilder()
-    .setTitle('Routina')
+    .setTitle('Ember')
     .setDescription('Behavioral change system API')
     .setVersion('1.0')
     .build();

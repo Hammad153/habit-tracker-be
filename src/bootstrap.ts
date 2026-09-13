@@ -18,15 +18,24 @@ export function configureApp(app: INestApplication): void {
   app.use(helmet());
 
   // Handle root-level requests and favicon before applying global prefix
-  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
-    if (req.path === '/' && req.method === 'GET') {
-      return res.json({ message: 'Routina API - Behavioral change system', status: 'running' });
-    }
-    if (req.path === '/favicon.ico') {
-      return res.status(204).send();
-    }
-    next();
-  });
+  app.use(
+    (
+      req: express.Request,
+      res: express.Response,
+      next: express.NextFunction,
+    ) => {
+      if (req.path === '/' && req.method === 'GET') {
+        return res.json({
+          message: 'Ember API - Behavioral change system',
+          status: 'running',
+        });
+      }
+      if (req.path === '/favicon.ico') {
+        return res.status(204).send();
+      }
+      next();
+    },
+  );
 
   // Bound request body size to mitigate large-payload abuse. The raw body is
   // captured for Paystack webhook HMAC signature verification (the signature
