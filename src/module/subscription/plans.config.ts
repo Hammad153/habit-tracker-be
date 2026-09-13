@@ -4,7 +4,7 @@ import { BadRequestException } from '@nestjs/common';
 import { BillingInterval } from '@prisma/client';
 
 /**
- * Routina monetization configuration — the single source of truth for plans,
+ * Ember monetization configuration — the single source of truth for plans,
  * prices, entitlements, and Paystack plan-code mapping.
  *
  * Prices are intentionally NOT scattered through the app: the backend exposes
@@ -56,7 +56,7 @@ export interface FeatureEntitlements {
   identities: boolean;
 }
 
-/** 7-day trial = full Routina experience (unrestricted). */
+/** 7-day trial = full Ember experience (unrestricted). */
 export const TRIAL_ENTITLEMENTS: FeatureEntitlements = {
   unlimitedHabits: true,
   dailyPlan: true,
@@ -200,13 +200,11 @@ export class PlanRegistry implements EntitlementsResolver {
     return this.configSvc.get<string>(plan.paystackPlanCodeEnv)?.trim() || null;
   }
 
-  /** Maps a Paystack plan code back to a Routina plan id (if configured). */
+  /** Maps a Paystack plan code back to a Ember plan id (if configured). */
   findPlanIdByPaystackCode(paystackPlanCode: string): PlanId | null {
     if (!paystackPlanCode) return null;
     for (const plan of PAID_PLANS) {
-      const code = this.configSvc
-        .get<string>(plan.paystackPlanCodeEnv)
-        ?.trim();
+      const code = this.configSvc.get<string>(plan.paystackPlanCodeEnv)?.trim();
       if (code && code === paystackPlanCode) return plan.id;
     }
     return null;
