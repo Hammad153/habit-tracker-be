@@ -12,5 +12,5 @@ export class CheckoutDto {
   })
   @IsString()
   @IsIn(SUBSCRIBABLE_PLAN_IDS as string[])
-  planId: string;
+  planId!: string;
 }

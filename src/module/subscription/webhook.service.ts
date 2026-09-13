@@ -87,9 +87,11 @@ export class SubscriptionWebhookService {
     try {
       await this.process(event, payload.data, userId);
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : undefined;
       this.logger.error(
-        `Webhook event ${event} (${dedupeKey}) failed: ${err?.message}`,
-        err?.stack,
+        `Webhook event ${event} (${dedupeKey}) failed: ${message}`,
+        stack,
       );
     }
 

@@ -7,5 +7,5 @@ export class VerifyPaymentDto {
     description: 'Paystack transaction reference returned by checkout',
   })
   @IsString()
-  reference: string;
+  reference!: string;
 }
