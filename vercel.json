@@ -24,7 +24,7 @@
   "crons": [
     {
       "path": "/api/v1/notifications/reengagement/dispatch",
-      "schedule": "0 * * * *"
+      "schedule": "0 8 * * *"
     }
   ]
 }
