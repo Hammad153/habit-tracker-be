@@ -746,7 +746,7 @@ model UserSubscription {
   id                        String              @id @default(cuid())
   userId                    String              @unique
   user                      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  // Routina plan id: TRIAL | BASIC_MONTHLY | BASIC_YEARLY | PREMIUM_MONTHLY | PREMIUM_YEARLY
+  // Embermate plan id: TRIAL | BASIC_MONTHLY | BASIC_YEARLY | PREMIUM_MONTHLY | PREMIUM_YEARLY
   planId                    String              @default("TRIAL")
   status                    SubscriptionStatus  @default(TRIALING)
   billingInterval           BillingInterval?

@@ -1,5 +1,5 @@
 /**
- * Comprehensive demo data seed script for Routina.
+ * Comprehensive demo data seed script for Embermate.
  *
  * Creates a fully populated, screenshot-ready demo account with realistic data
  * across every major module: habits, completions, daily plans, journal entries,
@@ -390,7 +390,7 @@ const prisma = new PrismaClient(prismaClientOptions);
 // ---------------------------------------------------------------------------
 
 async function main() {
-  console.log('\n🌱 Ember Demo Seed Script');
+  console.log('\n🌱 Embermate Demo Seed Script');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   await cleanupDemoData();

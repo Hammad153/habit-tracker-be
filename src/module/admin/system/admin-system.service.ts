@@ -7,7 +7,7 @@ export class AdminSystemService {
 
   getSystemConfig() {
     return {
-      appName: this.configSvc.get<string>('APP_NAME') || 'Ember',
+      appName: this.configSvc.get<string>('APP_NAME') || 'Embermate',
       environment: process.env.NODE_ENV || 'development',
       privacyFloor: 5,
       rewardEngineDefaults: {

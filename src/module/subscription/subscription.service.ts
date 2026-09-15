@@ -304,7 +304,7 @@ export class SubscriptionService {
     });
     if (!user) throw new NotFoundException('User not found');
 
-    const reference = `ember_${crypto.randomBytes(9).toString('hex')}`;
+    const reference = `embermate_${crypto.randomBytes(9).toString('hex')}`;
     const callbackUrl =
       (this.configSvc.get<string>('WEB_APP_URL') || '').trim() +
       '/subscription/result?reference=' +
@@ -316,7 +316,7 @@ export class SubscriptionService {
       planCode: paystackPlanCode,
       reference,
       callbackUrl: callbackUrl || undefined,
-      metadata: { userId, planId, app: 'ember' },
+      metadata: { userId, planId, app: 'embermate' },
     });
 
     await this.databaseSvc.paymentTransaction.create({

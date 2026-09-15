@@ -321,7 +321,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
       paystackSvc.initializeTransaction.mockResolvedValue({
         authorizationUrl: 'https://checkout.paystack.com/abc',
         accessCode: 'ac_abc',
-        reference: 'routina_anything',
+        reference: 'embermate_anything',
       });
       db.user.findUnique.mockResolvedValue({ id: 'user-1', email: 'a@b.com' });
       db.paymentTransaction.create.mockImplementation(({ data }: any) => ({
@@ -330,7 +330,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
       }));
 
       const res = await svc.checkout('user-1', PlanId.BASIC_MONTHLY);
-      expect(res.reference).toMatch(/^routina_[0-9a-f]{18}$/);
+      expect(res.reference).toMatch(/^embermate_[0-9a-f]{18}$/);
       expect(paystackSvc.initializeTransaction).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'a@b.com',
@@ -354,7 +354,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
       const { svc, db, plans, paystackSvc } = makeSvc();
       const payment = {
         userId: 'user-1',
-        reference: 'routina_abc',
+        reference: 'embermate_abc',
         planId: PlanId.BASIC_MONTHLY,
         billingInterval: BillingInterval.MONTHLY,
         amountNaira: 3000,
@@ -395,7 +395,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
         }),
       );
 
-      await svc.verify('user-1', 'routina_abc');
+      await svc.verify('user-1', 'embermate_abc');
 
       expect(db.userSubscription.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -410,7 +410,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
       );
       expect(db.paymentTransaction.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { reference: 'routina_abc' },
+          where: { reference: 'embermate_abc' },
           data: expect.objectContaining({ status: PaymentStatus.SUCCESS }),
         }),
       );
@@ -420,11 +420,11 @@ describe('SubscriptionService (Phase 3.9)', () => {
       const { svc, db } = makeSvc();
       db.paymentTransaction.findUnique.mockResolvedValue({
         userId: 'user-OTHER',
-        reference: 'routina_abc',
+        reference: 'embermate_abc',
         planId: PlanId.BASIC_MONTHLY,
         status: PaymentStatus.PENDING,
       });
-      await expect(svc.verify('user-1', 'routina_abc')).rejects.toThrow(
+      await expect(svc.verify('user-1', 'embermate_abc')).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -433,7 +433,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
       const { svc, db, paystackSvc } = makeSvc();
       db.paymentTransaction.findUnique.mockResolvedValue({
         userId: 'user-1',
-        reference: 'routina_abc',
+        reference: 'embermate_abc',
         planId: PlanId.BASIC_MONTHLY,
         billingInterval: BillingInterval.MONTHLY,
         amountNaira: 3000,
@@ -442,7 +442,7 @@ describe('SubscriptionService (Phase 3.9)', () => {
       paystackSvc.verifyTransaction.mockResolvedValue({
         success: false,
       } as any);
-      await expect(svc.verify('user-1', 'routina_abc')).rejects.toThrow(
+      await expect(svc.verify('user-1', 'embermate_abc')).rejects.toThrow(
         BadRequestException,
       );
       expect(db.paymentTransaction.update).toHaveBeenCalledWith(

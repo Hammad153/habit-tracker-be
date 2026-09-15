@@ -65,7 +65,7 @@ export class SubscriptionAccessGuard implements CanActivate {
       throw new ForbiddenException({
         code: 'SUBSCRIPTION_REQUIRED',
         message:
-          'Your free trial has ended. Choose a plan to continue using Ember.',
+          'Your free trial has ended. Choose a plan to continue using Embermate.',
       });
     }
 

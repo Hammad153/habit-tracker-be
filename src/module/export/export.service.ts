@@ -204,7 +204,7 @@ export class ExportService {
   public async getExcel(userId: string): Promise<Buffer> {
     const user = await this.loadUserWithData(userId);
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Ember';
+    workbook.creator = 'Embermate';
     workbook.created = new Date();
 
     // ── Profile sheet ──
@@ -508,7 +508,7 @@ export class ExportService {
 </head>
 <body>
 <div class="header">
-  <h1>Ember Report</h1>
+  <h1>Embermate Report</h1>
   <p>${this.escHtml(user.name)} &middot; ${this.escHtml(user.email)} &middot; Generated ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
 </div>
 
@@ -553,7 +553,7 @@ export class ExportService {
 </table>
 
 <div class="footer">
-  Ember &mdash; Your data, your journey. Export generated on ${this.fmtDateTime(new Date())}
+  Embermate &mdash; Your data, your journey. Export generated on ${this.fmtDateTime(new Date())}
 </div>
 </body>
 </html>`;

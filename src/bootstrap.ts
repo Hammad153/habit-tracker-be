@@ -26,7 +26,7 @@ export function configureApp(app: INestApplication): void {
     ) => {
       if (req.path === '/' && req.method === 'GET') {
         return res.json({
-          message: 'Ember API - Behavioral change system',
+          message: 'Embermate API - Behavioral change system',
           status: 'running',
         });
       }

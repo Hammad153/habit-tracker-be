@@ -58,7 +58,7 @@ describe('PlanRegistry (Phase 3.9 pricing/entitlements)', () => {
     expect(reg.getPaystackPlanCode(PlanId.PREMIUM_YEARLY)).toBe('PLN_prem_yr');
   });
 
-  it('maps a Paystack plan code back to a Routina plan id', () => {
+  it('maps a Paystack plan code back to an Embermate plan id', () => {
     const reg = makeRegistry({
       PAYSTACK_BASIC_ANNUAL_PLAN_CODE: 'PLN_basic_yr',
     });

@@ -16,10 +16,10 @@ const bootstrap = async () => {
   configureApp(app);
 
   const config = new DocumentBuilder()
-    .setTitle('Ember')
+    .setTitle('Embermate')
     .setDescription('Behavioral change system API')
     .setVersion('1.0')
-    .addTag('Ember')
+    .addTag('Embermate')
     .addBearerAuth()
     .build();
 

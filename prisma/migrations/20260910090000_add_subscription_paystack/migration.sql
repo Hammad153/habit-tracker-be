@@ -1,4 +1,4 @@
--- Routina monetization: Paystack subscriptions + 7-day free trial.
+-- Embermate monetization: Paystack subscriptions + 7-day free trial.
 -- Additive only — no existing tables or columns are modified.
 
 CREATE TYPE "SubscriptionStatus" AS ENUM ('TRIALING', 'ACTIVE', 'NON_RENEWING', 'PAST_DUE', 'PAYMENT_FAILED', 'EXPIRED', 'CANCELLED');

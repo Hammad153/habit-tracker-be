@@ -148,9 +148,9 @@ export class AuthService {
 
     await this.userSvc.updateResetToken(user.id, tokenDigest, resetTokenExpiry);
 
-    const appName = this.configSvc.get<string>('APP_NAME') || 'Ember';
+    const appName = this.configSvc.get<string>('APP_NAME') || 'Embermate';
     const appScheme =
-      this.configSvc.get<string>('APP_DEEP_LINK_SCHEME') || 'habittracker';
+      this.configSvc.get<string>('APP_DEEP_LINK_SCHEME') || 'embermate';
     const resetUrl = `${appScheme}://reset-password?token=${resetToken}`;
 
     // Send the password reset email

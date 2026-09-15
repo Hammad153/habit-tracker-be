@@ -146,7 +146,7 @@ export class SubscriptionWebhookService {
     }
     if (!resolvedUserId) {
       this.logger.warn(
-        `charge.success for ${reference}: no Ember user matched; ignored.`,
+        `charge.success for ${reference}: no Embermate user matched; ignored.`,
       );
       return;
     }

@@ -13,7 +13,7 @@ const SECRET = 'sk_test_webhooksecret';
 const sign = (raw: string, secret = SECRET) =>
   crypto.createHmac('sha512', secret).update(raw).digest('hex');
 
-const chargeSuccessPayload = (reference = 'routina_0001') => ({
+const chargeSuccessPayload = (reference = 'embermate_0001') => ({
   event: 'charge.success',
   data: {
     reference,
@@ -87,7 +87,7 @@ const row = (overrides: Record<string, any> = {}) => ({
   cancelAtPeriodEnd: false,
   cancelledAt: null,
   gracePeriodEndsAt: null,
-  lastPaymentReference: 'routina_0001',
+  lastPaymentReference: 'embermate_0001',
   paystackCustomerCode: 'CUS_1',
   paystackSubscriptionCode: 'SUB_1',
   createdAt: new Date(),
@@ -128,7 +128,7 @@ describe('SubscriptionWebhookService (Phase 3.9)', () => {
       db.user.findUnique.mockResolvedValue({ id: 'user-1' });
       db.paymentTransaction.findUnique.mockResolvedValue({
         userId: 'user-1',
-        reference: 'routina_0001',
+        reference: 'embermate_0001',
         planId: 'BASIC_MONTHLY',
         billingInterval: BillingInterval.MONTHLY,
         amountNaira: 3000,
@@ -149,7 +149,7 @@ describe('SubscriptionWebhookService (Phase 3.9)', () => {
           data: expect.objectContaining({
             event: 'charge.success',
             userId: 'user-1',
-            dedupeKey: 'charge.success:routina_0001',
+            dedupeKey: 'charge.success:embermate_0001',
           }),
         }),
       );
@@ -160,7 +160,7 @@ describe('SubscriptionWebhookService (Phase 3.9)', () => {
             status: SubscriptionStatus.ACTIVE,
             planId: 'BASIC_MONTHLY',
             currency: 'NGN',
-            lastPaymentReference: 'routina_0001',
+            lastPaymentReference: 'embermate_0001',
           }),
           create: expect.objectContaining({
             userId: 'user-1',
@@ -170,7 +170,7 @@ describe('SubscriptionWebhookService (Phase 3.9)', () => {
       );
       expect(db.paymentTransaction.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { reference: 'routina_0001' },
+          where: { reference: 'embermate_0001' },
           data: expect.objectContaining({ status: PaymentStatus.SUCCESS }),
         }),
       );
@@ -178,10 +178,10 @@ describe('SubscriptionWebhookService (Phase 3.9)', () => {
 
     it('skips reprocessing a retried event (returns duplicate)', async () => {
       const { svc, db } = makeSvc();
-      const payload = chargeSuccessPayload('routina_dup');
+      const payload = chargeSuccessPayload('embermate_dup');
       db.subscriptionWebhookEvent.findUnique.mockResolvedValue({
         id: 'ledger-1',
-        dedupeKey: 'charge.success:routina_dup',
+        dedupeKey: 'charge.success:embermate_dup',
       });
 
       const out = await svc.handleWebhook(
@@ -196,7 +196,7 @@ describe('SubscriptionWebhookService (Phase 3.9)', () => {
 
     it('matches a user by Paystack customer code even without the email', async () => {
       const { svc, db } = makeSvc();
-      const payload = chargeSuccessPayload('routina_cus');
+      const payload = chargeSuccessPayload('embermate_cus');
       payload.data.customer = { customer_code: 'CUS_1' } as any;
       db.subscriptionWebhookEvent.findUnique.mockResolvedValue(null);
       db.subscriptionWebhookEvent.create.mockResolvedValue({});
@@ -319,7 +319,7 @@ describe('SubscriptionWebhookService (Phase 3.9)', () => {
 
     it('charge.success with matching period from next_payment_date', async () => {
       const { svc, db } = makeSvc();
-      const payload = chargeSuccessPayload('routina_period');
+      const payload = chargeSuccessPayload('embermate_period');
       db.subscriptionWebhookEvent.findUnique.mockResolvedValue(null);
       db.subscriptionWebhookEvent.create.mockResolvedValue({});
       db.userSubscription.findFirst.mockResolvedValue({ userId: 'user-1' });

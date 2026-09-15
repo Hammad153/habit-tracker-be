@@ -36,9 +36,9 @@ export class MailerService {
 
     const fromOption =
       from ??
-      `${this.configSvc.get<string>('APP_NAME') || 'SME GLOBAL'} <${
+      `${this.configSvc.get<string>('APP_NAME') || 'Embermate'} <${
         this.configSvc.get<string>('DEFAULT_EMAIL_FROM') ||
-        'noreply@smeglobal.com'
+        'noreply@embermate.me'
       }>`;
 
     const to = Array.isArray(recipients)
