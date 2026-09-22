@@ -1,0 +1,10 @@
+allowBuilds:
+  '@nestjs/core': true
+  '@prisma/engines': true
+  '@scarf/scarf': true
+  '@sentry-internal/node-cpu-profiler': true
+  aws-sdk: true
+  esbuild: true
+  prisma: true
+  puppeteer: true
+  unrs-resolver: true
