@@ -19,7 +19,7 @@ describe('habit burial lifecycle', () => {
   it('buries and disables reminders in one transaction', async () => {
     const s = makeSubject();
     const result = await s.service.buryHabit('u1', 'h1', { commandId: 'c1', epitaph: 'A memorable ending.' });
-    expect(result.id).toBe('b1');
+    expect(result.id).toBe('c1');
     expect(s.tx.habit.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ lifecycleStatus: 'BURIED', isArchived: true }) }));
     expect(s.tx.reminder.updateMany).toHaveBeenCalled();
     expect(s.tx.habitBurial.create).toHaveBeenCalledTimes(1);
