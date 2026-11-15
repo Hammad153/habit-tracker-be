@@ -10,6 +10,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   Min,
@@ -25,6 +26,11 @@ export const SCHEDULE_TYPES = [
 export const COMPLETION_KINDS = ['FULL', 'MINIMUM', 'EMERGENCY'] as const;
 
 export class CreateHabitDto {
+  /** Optional stable ID supplied by an offline-capable client. */
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
   @ApiProperty({
     example: 'Drink Water',
     description: 'The title of the habit',

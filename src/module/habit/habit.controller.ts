@@ -6,6 +6,7 @@ import {
   Get,
   Patch,
   Post,
+  Put,
   Body,
   Param,
 } from '@nestjs/common';
@@ -25,6 +26,11 @@ import { ToggleCompletionDto } from './dto/toggle-completion.dto';
 import { CurrentUser } from '../../core/decorators/current-user.decorator';
 import { StreakFreezeService } from '../rewards/streak-freeze.service';
 import { FreezeDto } from './dto/freeze.dto';
+import { BuryHabitDto } from './dto/bury-habit.dto';
+import { TransitionHabitDto } from './dto/transition-habit.dto';
+import { SetCompletionDto } from './dto/set-completion.dto';
+import { RestartBurialDto } from './dto/restart-burial.dto';
+import { Query } from '@nestjs/common';
 
 @ApiTags('Habits')
 @ApiBearerAuth()
@@ -35,6 +41,46 @@ export class HabitController {
     private readonly freezeSvc: StreakFreezeService,
     private readonly adaptiveSvc: AdaptiveService,
   ) {}
+
+  @Get('burials')
+  listBurials(@CurrentUser() userId: string, @Query('cursor') cursor?: string) {
+    return this.habitSvc.listBurials(userId, cursor);
+  }
+
+  @Get('burials/:burialId')
+  getBurial(@CurrentUser() userId: string, @Param('burialId') burialId: string) {
+    return this.habitSvc.getBurial(userId, burialId);
+  }
+
+  @Post('burials/:burialId/restore')
+  restoreBurial(@CurrentUser() userId: string, @Param('burialId') burialId: string) {
+    return this.habitSvc.restoreBurial(userId, burialId);
+  }
+
+  @Post('burials/:burialId/restart')
+  restartBurial(@CurrentUser() userId: string, @Param('burialId') burialId: string, @Body() body: RestartBurialDto) {
+    return this.habitSvc.restartBurial(userId, burialId, body.newHabitId);
+  }
+
+  @Post(':id/bury')
+  buryHabit(@CurrentUser() userId: string, @Param('id') id: string, @Body() body: BuryHabitDto) {
+    return this.habitSvc.buryHabit(userId, id, body);
+  }
+
+  @Get(':id/burials')
+  burialHistory(@CurrentUser() userId: string, @Param('id') id: string) {
+    return this.habitSvc.burialHistory(userId, id);
+  }
+
+  @Post(':id/lifecycle')
+  transitionHabit(@CurrentUser() userId: string, @Param('id') id: string, @Body() body: TransitionHabitDto) {
+    return this.habitSvc.transitionHabit(userId, id, body.status);
+  }
+
+  @Put(':id/completions/:date')
+  setCompletion(@CurrentUser() userId: string, @Param('id') id: string, @Param('date') date: string, @Body() body: SetCompletionDto) {
+    return this.habitSvc.setCompletion(id, userId, date, body);
+  }
 
   /**
    * Phase 3.5 — deterministic adaptive suggestion (AI wording included).

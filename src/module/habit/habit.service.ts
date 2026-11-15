@@ -1,4 +1,4 @@
-import { CompletionKind, Completion, Prisma, Habit } from '@prisma/client';
+import { CompletionKind, Completion, Prisma, Habit, HabitBurial, HabitLifecycleStatus } from '@prisma/client';
 import { INTERACTIVE_TX_OPTIONS } from '../../core/database/transaction-options';
 import {
   BadRequestException,
@@ -16,6 +16,9 @@ import {
 import { DomainEventService } from '../../core/events/domain-event.service';
 import { XP_PER_COMPLETION } from '../../core/utils/progression.utils';
 import { EVIDENCE_POINTS } from '../../core/utils/evidence.utils';
+import { longestStreakFromDates } from '../../core/utils/behavior-analytics.utils';
+import { BuryHabitDto } from './dto/bury-habit.dto';
+import { SetCompletionDto } from './dto/set-completion.dto';
 import {
   wouldCreateStackCycle,
   StackEdge,
@@ -47,6 +50,152 @@ export class HabitService {
     private rewardEngine: RewardEngineService,
     private domainEvents: DomainEventService,
   ) {}
+
+  /** Burials are explicit, immutable snapshots. A command ID makes retries safe. */
+  public async buryHabit(userId: string, habitId: string, input: BuryHabitDto): Promise<HabitBurial> {
+    return this.databaseSvc.$transaction(async (tx) => {
+      const existing = await tx.habitBurial.findUnique({
+        where: { userId_commandId: { userId, commandId: input.commandId } },
+      });
+      if (existing) {
+        if (existing.habitId !== habitId) throw new ConflictException('Command ID belongs to another habit');
+        return existing;
+      }
+      const habit = await tx.habit.findFirst({ where: { id: habitId, userId } });
+      if (!habit) throw new NotFoundException('Habit not found');
+      if (habit.lifecycleStatus !== 'ACTIVE' && habit.lifecycleStatus !== 'PAUSED') {
+        throw new ConflictException('Only active or paused habits can be buried');
+      }
+      const changed = await tx.habit.updateMany({
+        where: { id: habitId, userId, version: habit.version, lifecycleStatus: habit.lifecycleStatus },
+        data: { lifecycleStatus: 'BURIED', isArchived: true, version: { increment: 1 } },
+      });
+      if (changed.count !== 1) throw new ConflictException('Habit changed; reload and retry');
+      const completions = await tx.completion.findMany({
+        where: { habitId, status: true }, select: { date: true }, orderBy: { date: 'asc' },
+      });
+      const dates = completions.map((item) => item.date);
+      const reminder = await tx.reminder.findFirst({ where: { habitId, enabled: true } });
+      await tx.reminder.updateMany({ where: { habitId, enabled: true }, data: { enabled: false } });
+      const sequence = (await tx.habitBurial.count({ where: { habitId } })) + 1;
+      const burial = await tx.habitBurial.create({ data: {
+        id: input.commandId, userId, habitId, commandId: input.commandId, sequence,
+        title: habit.title, habitCreatedAt: habit.createdAt,
+        lastCompletedDay: dates.at(-1) ?? null, totalCompletions: dates.length,
+        bestStreak: longestStreakFromDates(dates),
+        reason: input.reason?.trim() || null,
+        epitaph: input.epitaph?.trim() || 'A promising beginning. A memorable ending.',
+        theme: input.theme ?? 'stone', reminderEnabled: !!reminder,
+      } });
+      await tx.habitLifecycleEvent.create({ data: {
+        userId, habitId, fromState: habit.lifecycleStatus, toState: 'BURIED', commandId: input.commandId,
+      } });
+      return burial;
+    }, INTERACTIVE_TX_OPTIONS);
+  }
+
+  public async listBurials(userId: string, cursor?: string) {
+    return this.databaseSvc.habitBurial.findMany({
+      where: { userId }, orderBy: [{ buriedAt: 'desc' }, { id: 'desc' }], take: 30,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    });
+  }
+
+  public async getBurial(userId: string, burialId: string) {
+    const burial = await this.databaseSvc.habitBurial.findFirst({ where: { id: burialId, userId } });
+    if (!burial) throw new NotFoundException('Burial not found');
+    return burial;
+  }
+
+  public async burialHistory(userId: string, habitId: string) {
+    await this.findOne(habitId, userId);
+    return this.databaseSvc.habitBurial.findMany({ where: { userId, habitId }, orderBy: { buriedAt: 'desc' } });
+  }
+
+  public async restoreBurial(userId: string, burialId: string) {
+    return this.databaseSvc.$transaction(async (tx) => {
+      const burial = await tx.habitBurial.findFirst({ where: { id: burialId, userId } });
+      if (!burial) throw new NotFoundException('Burial not found');
+      if (burial.restoredAt) return tx.habit.findUniqueOrThrow({ where: { id: burial.habitId } });
+      if (burial.restartHabitId) throw new ConflictException('Burial was restarted');
+      const habit = await tx.habit.findFirst({ where: { id: burial.habitId, userId } });
+      if (!habit || habit.lifecycleStatus !== 'BURIED') throw new ConflictException('Habit is no longer buried');
+      const changed = await tx.habit.updateMany({
+        where: { id: habit.id, userId, version: habit.version, lifecycleStatus: 'BURIED' },
+        data: { lifecycleStatus: 'ACTIVE', isArchived: false, version: { increment: 1 } },
+      });
+      if (changed.count !== 1) throw new ConflictException('Habit changed; reload and retry');
+      await tx.habitBurial.update({ where: { id: burialId }, data: { restoredAt: new Date() } });
+      if (burial.reminderEnabled) await tx.reminder.updateMany({ where: { habitId: habit.id }, data: { enabled: true } });
+      await tx.habitLifecycleEvent.create({ data: { userId, habitId: habit.id, fromState: 'BURIED', toState: 'ACTIVE' } });
+      return tx.habit.findUniqueOrThrow({ where: { id: habit.id } });
+    }, INTERACTIVE_TX_OPTIONS);
+  }
+
+  /** A restart is a new habit with no completions; the tombstone remains. */
+  public async restartBurial(userId: string, burialId: string, newHabitId: string) {
+    return this.databaseSvc.$transaction(async (tx) => {
+      const burial = await tx.habitBurial.findFirst({ where: { id: burialId, userId } });
+      if (!burial) throw new NotFoundException('Burial not found');
+      if (burial.restartHabitId) {
+        if (burial.restartHabitId !== newHabitId) throw new ConflictException('Burial was already restarted');
+        return tx.habit.findUniqueOrThrow({ where: { id: newHabitId } });
+      }
+      if (burial.restoredAt) throw new ConflictException('Burial was restored');
+      const prior = await tx.habit.findFirst({ where: { id: burial.habitId, userId } });
+      if (!prior || prior.lifecycleStatus !== 'BURIED') throw new ConflictException('Habit is no longer buried');
+      const next = await tx.habit.create({ data: {
+        id: newHabitId, userId, title: prior.title, subtitle: prior.subtitle, icon: prior.icon,
+        iconColor: prior.iconColor, iconBg: prior.iconBg, category: prior.category,
+        frequency: prior.frequency, scheduleType: prior.scheduleType,
+        scheduleDays: prior.scheduleDays, timesPerWeek: prior.timesPerWeek,
+        intervalDays: prior.intervalDays, priority: prior.priority,
+        goal: prior.goal, unit: prior.unit, scheduledTime: prior.scheduledTime,
+        location: prior.location, fullBehavior: prior.fullBehavior,
+        minimumBehavior: prior.minimumBehavior, emergencyMinimum: prior.emergencyMinimum,
+        fullCoins: prior.fullCoins, minimumCoins: prior.minimumCoins,
+        emergencyCoins: prior.emergencyCoins, streakBonusEnabled: prior.streakBonusEnabled,
+        identityBonusEnabled: prior.identityBonusEnabled, rewardFundAmount: prior.rewardFundAmount,
+      } });
+      await tx.habitBurial.update({ where: { id: burialId }, data: { restartHabitId: next.id } });
+      return next;
+    }, INTERACTIVE_TX_OPTIONS);
+  }
+
+  public async transitionHabit(userId: string, habitId: string, target: HabitLifecycleStatus) {
+    if (!['ACTIVE', 'PAUSED', 'ARCHIVED', 'COMPLETED'].includes(target)) {
+      throw new BadRequestException('Unsupported lifecycle transition');
+    }
+    return this.databaseSvc.$transaction(async (tx) => {
+      const habit = await tx.habit.findFirst({ where: { id: habitId, userId } });
+      if (!habit) throw new NotFoundException('Habit not found');
+      const from = habit.lifecycleStatus;
+      if (from === target) return habit;
+      if (from === 'BURIED' || from === 'EXPIRED' || (target !== 'ACTIVE' && from !== 'ACTIVE')) {
+        throw new ConflictException('Invalid lifecycle transition');
+      }
+      const enabledBefore = target === 'ACTIVE'
+        ? (await tx.habitLifecycleEvent.findFirst({
+          where: { habitId, userId, toState: from }, orderBy: { createdAt: 'desc' },
+        }))?.reminderEnabled ?? false
+        : !!(await tx.reminder.findFirst({ where: { habitId, enabled: true } }));
+      const changed = await tx.habit.updateMany({
+        where: { id: habitId, userId, version: habit.version, lifecycleStatus: from },
+        data: { lifecycleStatus: target, isArchived: target === 'ARCHIVED' || target === 'COMPLETED', version: { increment: 1 } },
+      });
+      if (changed.count !== 1) throw new ConflictException('Habit changed; reload and retry');
+      if (target === 'ACTIVE' && enabledBefore) {
+        await tx.reminder.updateMany({ where: { habitId }, data: { enabled: true } });
+      } else if (target !== 'ACTIVE') {
+        await tx.reminder.updateMany({ where: { habitId, enabled: true }, data: { enabled: false } });
+      }
+      await tx.habitLifecycleEvent.create({ data: {
+        userId, habitId, fromState: from, toState: target,
+        reminderEnabled: target !== 'ACTIVE' && enabledBefore,
+      } });
+      return tx.habit.findUniqueOrThrow({ where: { id: habitId } });
+    }, INTERACTIVE_TX_OPTIONS);
+  }
 
   public async findAll(userId: string): Promise<Habit[]> {
     // Clean up expired habits before returning
@@ -91,6 +240,14 @@ export class HabitService {
     const habitData = { ...(data ?? {}) } as Record<string, unknown>;
     delete habitData.userId;
 
+    if (typeof habitData.id === 'string') {
+      const existing = await this.databaseSvc.habit.findUnique({ where: { id: habitData.id } });
+      if (existing) {
+        if (existing.userId !== userId) throw new ConflictException('Habit ID is unavailable');
+        return existing;
+      }
+    }
+
     // Remote DB latency: explicit budgets avoid default-2s maxWait failures.
     return this.databaseSvc.$transaction(
       async (tx) => {
@@ -129,9 +286,17 @@ export class HabitService {
     userId: string,
     data: any,
   ): Promise<Habit> {
-    await this.findOne(id, userId); // enforces ownership
+    const current = await this.findOne(id, userId); // enforces ownership
+    if (current.lifecycleStatus === 'BURIED' && data?.isArchived === false) {
+      throw new ConflictException('Restore a buried habit through its burial record');
+    }
     const habitData = { ...(data ?? {}) } as Record<string, unknown>;
     delete habitData.userId;
+    delete habitData.id;
+    delete habitData.expectedVersion;
+    if (typeof data?.expectedVersion === 'number' && current.version !== data.expectedVersion) {
+      throw new ConflictException('Habit changed; reload and retry');
+    }
 
     // Remote DB latency: explicit budgets avoid default-2s maxWait failures.
     return this.databaseSvc.$transaction(
@@ -143,6 +308,10 @@ export class HabitService {
       ) as Prisma.HabitUncheckedUpdateInput & {
         stackAfterHabitId?: string | null;
       };
+      if (typeof data?.isArchived === 'boolean') {
+        processedData.lifecycleStatus = data.isArchived ? 'ARCHIVED' : 'ACTIVE';
+      }
+      processedData.version = { increment: 1 };
 
       if (processedData.stackAfterHabitId !== undefined) {
         if (processedData.stackAfterHabitId === null) {
@@ -163,7 +332,7 @@ export class HabitService {
       }
 
       return tx.habit.update({
-        where: { id },
+        where: { id, ...(typeof data?.expectedVersion === 'number' ? { version: data.expectedVersion } : {}) },
         data: processedData,
       });
       },
@@ -177,25 +346,28 @@ export class HabitService {
    * archived habits must remain queryable for analytics and journaling.
    */
   public async deleteHabit(id: string, userId: string): Promise<Habit> {
-    await this.findOne(id, userId);
+    const habit = await this.findOne(id, userId);
+    if (habit.lifecycleStatus === 'BURIED') throw new ConflictException('Buried habits must be restored before changing them');
 
-    const [completionCount, linkCount] = await Promise.all([
+    const [completionCount, linkCount, burialCount, eventCount] = await Promise.all([
       this.databaseSvc.completion.count({ where: { habitId: id } }),
       this.databaseSvc.identityHabit.count({ where: { habitId: id } }),
+      this.databaseSvc.habitBurial.count({ where: { habitId: id } }),
+      this.databaseSvc.habitLifecycleEvent.count({ where: { habitId: id } }),
     ]);
 
-    if (completionCount > 0 || linkCount > 0) {
-      const [archived] = await Promise.all([
-        this.databaseSvc.habit.update({
+    if (completionCount > 0 || linkCount > 0 || burialCount > 0 || eventCount > 0) {
+      return this.databaseSvc.$transaction(async (tx) => {
+        const archived = await tx.habit.update({
           where: { id },
-          data: { isArchived: true },
-        }),
-        this.databaseSvc.reminder.updateMany({
+          data: { isArchived: true, lifecycleStatus: 'ARCHIVED', version: { increment: 1 } },
+        });
+        await tx.reminder.updateMany({
           where: { habitId: id, enabled: true },
           data: { enabled: false },
-        }),
-      ]);
-      return archived;
+        });
+        return archived;
+      }, INTERACTIVE_TX_OPTIONS);
     }
 
     return this.databaseSvc.habit.delete({ where: { id } });
@@ -220,18 +392,17 @@ export class HabitService {
     if (expired.length === 0) return 0;
 
     const ids = expired.map((h) => h.id);
-    const [result] = await Promise.all([
-      this.databaseSvc.habit.updateMany({
+    return this.databaseSvc.$transaction(async (tx) => {
+      const result = await tx.habit.updateMany({
         where: { id: { in: ids } },
-        data: { isArchived: true },
-      }),
-      this.databaseSvc.reminder.updateMany({
+        data: { isArchived: true, lifecycleStatus: 'EXPIRED', version: { increment: 1 } },
+      });
+      await tx.reminder.updateMany({
         where: { habitId: { in: ids }, enabled: true },
         data: { enabled: false },
-      }),
-    ]);
-
-    return result.count;
+      });
+      return result.count;
+    }, INTERACTIVE_TX_OPTIONS);
   }
 
   /**
@@ -409,6 +580,9 @@ export class HabitService {
     value?: number,
     kindInput?: string,
   ): Promise<CompletionResult> {
+    // A local day can be one date ahead of UTC (UTC+14). Reject anything
+    // beyond that bound while preserving existing backdated check-ins.
+    this.assertCompletionDayKey(date);
     const habit = await this.findOne(habitId, userId);
     const kind = (kindInput ?? 'FULL') as CompletionKind;
     this.assertValidCompletionKind(habit, kind);
@@ -420,7 +594,7 @@ export class HabitService {
     });
 
     // Archived habits accept reversal of existing entries but no NEW wins.
-    if (!existing && habit.isArchived) {
+    if (!existing && (habit.isArchived || (habit.lifecycleStatus && habit.lifecycleStatus !== 'ACTIVE'))) {
       throw new ConflictException(
         'Archived habits cannot receive new completions. Restore the habit first.',
       );
@@ -696,5 +870,36 @@ export class HabitService {
     }
 
     return result;
+  }
+
+  public async setCompletion(habitId: string, userId: string, date: string, desired: SetCompletionDto) {
+    this.assertCompletionDayKey(date);
+    const habit = await this.findOne(habitId, userId);
+    const existing = await this.databaseSvc.completion.findUnique({ where: { habitId_date: { habitId, date } } });
+    if (desired.status) {
+      const value = desired.value ?? habit.goal;
+      const kind = desired.kind ?? 'FULL';
+      if (existing && existing.status && existing.value === value && existing.kind === kind) return existing;
+      return this.toggleCompletion(habitId, userId, date, desired.value ?? habit.goal, desired.kind ?? 'FULL');
+    }
+    if (!existing) return { habitId, date, status: false };
+    try {
+      return await this.toggleCompletion(habitId, userId, date);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        return { habitId, date, status: false };
+      }
+      throw error;
+    }
+  }
+
+  private assertCompletionDayKey(date: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new BadRequestException('Invalid completion date');
+    const parsed = new Date(`${date}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+      throw new BadRequestException('Invalid completion date');
+    }
+    const latestLocalDay = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    if (date > latestLocalDay) throw new BadRequestException('Completion date cannot be in the future');
   }
 }

@@ -95,6 +95,15 @@ enum CompletionKind {
   EMERGENCY
 }
 
+enum HabitLifecycleStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+  COMPLETED
+  BURIED
+  EXPIRED
+}
+
 enum IdentityStatus {
   ACTIVE
   ARCHIVED
@@ -161,6 +170,8 @@ model User {
   totalHabits              Int                       @default(0)
   completionRate           Float                     @default(0)
   habits                   Habit[]
+  habitBurials             HabitBurial[]
+  habitLifecycleEvents     HabitLifecycleEvent[]
   badges                   UserBadge[]
   reminders                Reminder[]
   budgets                  Budget[]
@@ -390,6 +401,10 @@ model Habit {
   // FULL completion. Null disables funding for this habit. Never real money.
   rewardFundAmount         Float?
   isArchived               Boolean                   @default(false)
+  lifecycleStatus          HabitLifecycleStatus       @default(ACTIVE)
+  version                  Int                       @default(0)
+  burials                  HabitBurial[]
+  lifecycleEvents          HabitLifecycleEvent[]
   startDate                DateTime? // Optional start date for temporary habits
   endDate                  DateTime? // Optional end date - habit will be auto-deleted after this date
   createdAt                DateTime                  @default(now())
@@ -402,6 +417,50 @@ model Habit {
   streakFreezes            StreakFreeze[]
   rewardAllocations        HabitRewardAllocation[]
   habitAdjustmentProposals HabitAdjustmentProposal[]
+}
+
+/// A tombstone is an immutable snapshot of one burial attempt. Restoration
+/// leaves the record intact and records its time separately.
+model HabitBurial {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habitId          String
+  habit            Habit     @relation(fields: [habitId], references: [id], onDelete: Restrict)
+  commandId        String
+  sequence         Int
+  title            String
+  habitCreatedAt   DateTime
+  lastCompletedDay String?
+  totalCompletions Int
+  bestStreak       Int
+  reason           String?
+  epitaph          String
+  theme            String    @default("stone")
+  reminderEnabled  Boolean   @default(false)
+  buriedAt         DateTime  @default(now())
+  restoredAt       DateTime?
+  restartHabitId   String?
+
+  @@unique([userId, commandId])
+  @@unique([habitId, sequence])
+  @@index([userId, buriedAt])
+}
+
+model HabitLifecycleEvent {
+  id        String               @id @default(cuid())
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habitId   String
+  habit     Habit                @relation(fields: [habitId], references: [id], onDelete: Restrict)
+  fromState HabitLifecycleStatus
+  toState   HabitLifecycleStatus
+  commandId String?
+  reminderEnabled Boolean @default(false)
+  createdAt DateTime             @default(now())
+
+  @@index([habitId, createdAt])
+  @@index([userId, createdAt])
 }
 
 model Budget {

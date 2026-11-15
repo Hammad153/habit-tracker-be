@@ -1,10 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsIn,
+  IsDateString,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
 } from 'class-validator';
 import { COMPLETION_KINDS } from './create-habit.dto';
 
@@ -15,6 +17,8 @@ export class ToggleCompletionDto {
   })
   @IsString()
   @IsNotEmpty()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
   date: string;
 
   @ApiPropertyOptional({

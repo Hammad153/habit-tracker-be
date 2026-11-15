@@ -105,6 +105,11 @@ function breakdownOf(total: number): any {
 }
 
 describe('HabitService.toggleCompletion', () => {
+  it('rejects a completion beyond the maximum local calendar day', async () => {
+    const s = makeService();
+    await expect(s.service.toggleCompletion('habit-1', 'user-1', '9999-01-01')).rejects.toBeInstanceOf(BadRequestException);
+    expect(s.database.habit.findUnique).not.toHaveBeenCalled();
+  });
   it('creates a FULL completion and grants XP + coins once', async () => {
     const s = makeService();
     s.database.habit.findUnique.mockResolvedValue(habit());
@@ -430,6 +435,27 @@ describe('HabitService.toggleCompletion', () => {
   });
 });
 
+describe('HabitService offline creation', () => {
+  it('returns the same owned habit for a repeated client ID', async () => {
+    const s = makeService();
+    s.database.habit.findUnique.mockResolvedValue(habit({ id: 'client-id' }));
+    const result = await s.service.createHabit('user-1', { id: 'client-id', title: 'Read' });
+    expect(result.id).toBe('client-id');
+    expect(s.tx.habit.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('HabitService desired completion', () => {
+  it('does not create a completion when setting an already empty day to false', async () => {
+    const s = makeService();
+    s.database.habit.findUnique.mockResolvedValue(habit());
+    s.database.completion.findUnique.mockResolvedValue(null);
+    await s.service.setCompletion('habit-1', 'user-1', '2026-11-01', { status: false });
+    expect(s.tx.completion.create).not.toHaveBeenCalled();
+    expect(s.tx.completion.delete).not.toHaveBeenCalled();
+  });
+});
+
 describe('HabitService stacking validation', () => {
   it('rejects direct self-stacking on update', async () => {
     const s = makeService();
@@ -504,7 +530,7 @@ describe('HabitService stacking validation', () => {
     });
     expect(s.database.habit.update).toHaveBeenCalledWith({
       where: { id: 'meditate' },
-      data: { stackAfterHabitId: 'brush-teeth' },
+      data: expect.objectContaining({ stackAfterHabitId: 'brush-teeth', version: { increment: 1 } }),
     });
     expect(result).toBeDefined();
   });

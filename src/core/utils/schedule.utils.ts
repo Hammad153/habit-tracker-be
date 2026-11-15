@@ -27,6 +27,9 @@ export interface HabitScheduleShape {
   timesPerWeek?: number | null;
   intervalDays?: number | null;
   startDate?: Date | string | null;
+  endDate?: Date | string | null;
+  createdAt?: Date | string | null;
+  restDays?: string[] | null;
 }
 
 /**
@@ -42,6 +45,11 @@ export const isScheduledOnDate = (
   habit: HabitScheduleShape,
   dateKey: string,
 ): boolean => {
+  const toKey = (value?: Date | string | null) =>
+    value instanceof Date ? value.toISOString().slice(0, 10) : value?.slice(0, 10);
+  if (habit.startDate && dateKey < toKey(habit.startDate)!) return false;
+  if (habit.endDate && dateKey > toKey(habit.endDate)!) return false;
+  if (habit.restDays?.includes(dateKey)) return false;
   switch (habit.scheduleType) {
     case 'specific_days': {
       const days = habit.scheduleDays ?? [];
@@ -51,10 +59,8 @@ export const isScheduledOnDate = (
     case 'interval': {
       const interval = habit.intervalDays ?? 1;
       if (interval <= 1) return true;
-      const anchor =
-        habit.startDate instanceof Date
-          ? habit.startDate.toISOString().slice(0, 10)
-          : (habit.startDate?.slice(0, 10) ?? '2026-01-01');
+      const anchor = toKey(habit.startDate) ?? toKey(habit.createdAt);
+      if (!anchor) return true;
       if (dateKey < anchor) return false;
       return daysBetweenKeys(anchor, dateKey) % interval === 0;
     }
